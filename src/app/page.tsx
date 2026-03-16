@@ -24,11 +24,29 @@ interface MealAppRow {
   goals: PFCGoals | null;
 }
 
+interface MealAppExportPayload {
+  source: "MealApp";
+  version: 1;
+  exportedAt: string;
+  goals: PFCGoals;
+  meals: Meal[];
+}
+
 function migrateMeals(meals: Meal[]): Meal[] {
   return meals.map((meal) => ({
     ...meal,
     date: meal.date ?? toDateKey(new Date(meal.timestamp)),
   }));
+}
+
+function buildMachineExport(meals: Meal[], goals: PFCGoals): MealAppExportPayload {
+  return {
+    source: "MealApp",
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    goals,
+    meals: [...meals].sort((a, b) => a.timestamp - b.timestamp),
+  };
 }
 
 function LoginCard({
@@ -358,6 +376,19 @@ export default function Home() {
       .catch(() => showToast("コピーに失敗しました"));
   };
 
+  const handleMachineExport = () => {
+    if (meals.length === 0) {
+      showToast("まだ食事データがありません");
+      return;
+    }
+
+    const payload = buildMachineExport(meals, goals);
+    navigator.clipboard
+      .writeText(JSON.stringify(payload, null, 2))
+      .then(() => showToast("統合ツール用JSONをコピーしました"))
+      .catch(() => showToast("JSONのコピーに失敗しました"));
+  };
+
   const handleSignOut = async () => {
     if (!supabase) return;
     await supabase.auth.signOut();
@@ -462,7 +493,13 @@ export default function Home() {
               onClick={handleExport}
               className="text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-4 py-2 rounded-lg border border-gray-700 transition flex items-center gap-2 font-medium"
             >
-              AIへ出力
+              その日をコピー
+            </button>
+            <button
+              onClick={handleMachineExport}
+              className="text-xs bg-emerald-900/40 hover:bg-emerald-800/60 text-emerald-200 px-4 py-2 rounded-lg border border-emerald-800 transition flex items-center gap-2 font-medium"
+            >
+              統合ツール用JSON
             </button>
             <button
               onClick={handleSignOut}
