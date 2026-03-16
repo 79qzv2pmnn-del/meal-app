@@ -1,36 +1,70 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# MealApp
 
-## Getting Started
+GitHub Pages で公開できる、食事記録アプリです。  
+AI 入力は使わず、`手入力 + マイレシピ + 定番セット` に絞っています。  
+データは Supabase に保存するので、PC とスマホで同じ記録を見られます。
 
-First, run the development server:
+## できること
+
+- 食事の手入力
+- マイレシピ登録
+- 定番セット登録
+- 日別の記録確認
+- PFC とカロリーの集計
+- PC / スマホ同期
+
+## 1. Supabase を用意する
+
+1. Supabase で新しいプロジェクトを作る
+2. SQL Editor を開く
+3. [`supabase_setup.sql`](./supabase_setup.sql) の中身をそのまま実行する
+4. `Authentication` で Email ログインを有効にしておく
+5. `Project Settings > API` から次の 2 つを控える
+
+- `Project URL`
+- `anon public key`
+
+## 2. GitHub Secrets を入れる
+
+GitHub リポジトリの `Settings > Secrets and variables > Actions` で、次を追加します。
+
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+
+## 3. GitHub Pages を有効にする
+
+このリポジトリには [`deploy-pages.yml`](./.github/workflows/deploy-pages.yml) が入っています。  
+`main` または `master` に push すると自動で GitHub Pages にデプロイされます。
+
+GitHub 側で Pages を使うときは、`Settings > Pages` で `GitHub Actions` を選んでください。
+
+## 4. 初回ログイン
+
+公開 URL を開いたら:
+
+1. `初回登録` を押す
+2. メールアドレスとパスワードを入れる
+3. 以後は同じ情報で PC とスマホからログインする
+
+## Local Development
 
 ```bash
+npm install
+cp .env.local.example .env.local
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+`.env.local` には次を入れます。
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+NEXT_PUBLIC_SUPABASE_URL="https://your-project.supabase.co"
+NEXT_PUBLIC_SUPABASE_ANON_KEY="your_anon_key"
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Build
 
-## Learn More
+```bash
+npm run build
+```
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+`next.config.ts` で static export 設定済みなので、GitHub Pages 用の `out` が作られます。
