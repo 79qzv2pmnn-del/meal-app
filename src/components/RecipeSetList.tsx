@@ -149,6 +149,8 @@ export default function RecipeSetList({
                     <span className="flex-1 text-sm text-gray-200 truncate">{getRecipeName(item.recipeId)}</span>
                     <input
                       type="number"
+                      step="0.01"
+                      min="0"
                       value={item.amount}
                       onChange={(e) =>
                         setNewItems(

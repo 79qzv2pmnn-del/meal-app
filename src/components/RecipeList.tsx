@@ -20,8 +20,8 @@ export default function RecipeList({ recipes, onChange, onSelectRecipe }: Props)
   const [protein, setProtein] = useState("");
   const [fat, setFat] = useState("");
   const [carbs, setCarbs] = useState("");
-  const [baseAmount, setBaseAmount] = useState("1");
-  const [unit, setUnit] = useState("人前");
+  const [baseAmount, setBaseAmount] = useState("100");
+  const [unit, setUnit] = useState("g");
 
   const resetForm = () => {
     setName("");
@@ -30,8 +30,8 @@ export default function RecipeList({ recipes, onChange, onSelectRecipe }: Props)
     setProtein("");
     setFat("");
     setCarbs("");
-    setBaseAmount("1");
-    setUnit("人前");
+    setBaseAmount("100");
+    setUnit("g");
   };
 
   const handleAddRecipe = (e: React.FormEvent) => {
@@ -168,7 +168,7 @@ export default function RecipeList({ recipes, onChange, onSelectRecipe }: Props)
             <div className="flex gap-4 mt-2">
               <div className="flex-1 flex flex-col gap-1">
                 <label className="text-[10px] text-gray-400 uppercase">基準量 (数値)</label>
-                <input type="number" value={baseAmount} onChange={(e) => setBaseAmount(e.target.value)} placeholder="200" className="bg-gray-800 border-b border-gray-600 p-2 text-white text-sm focus:outline-none focus:border-emerald-500" required />
+                <input type="number" value={baseAmount} onChange={(e) => setBaseAmount(e.target.value)} placeholder="100" className="bg-gray-800 border-b border-gray-600 p-2 text-white text-sm focus:outline-none focus:border-emerald-500" required />
               </div>
               <div className="flex-x flex flex-col gap-1">
                 <label className="text-[10px] text-gray-400 uppercase">単位</label>

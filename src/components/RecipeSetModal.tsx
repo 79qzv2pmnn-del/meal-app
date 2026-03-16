@@ -88,6 +88,8 @@ export default function RecipeSetModal({ set, recipes, onRecord, onClose }: Prop
                 <div className="flex items-center gap-1">
                   <input
                     type="number"
+                    step="0.01"
+                    min="0"
                     value={item.amount}
                     onChange={e => setItems(items.map((it, i) => i === idx ? { ...it, amount: Number(e.target.value) } : it))}
                     disabled={!item.enabled}

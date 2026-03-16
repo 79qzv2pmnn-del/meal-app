@@ -168,6 +168,8 @@ export default function MealInput({
                     <div className="flex items-center gap-1">
                       <input
                         type="number"
+                        step="0.01"
+                        min="0"
                         value={actualAmount}
                         onChange={(e) => handleActualAmountChange(e.target.value)}
                         className="w-16 bg-gray-800 border border-emerald-500/50 rounded py-1 px-2 text-center text-white text-sm focus:border-emerald-500 focus:outline-none"
@@ -182,7 +184,7 @@ export default function MealInput({
                   <span className="text-xs text-emerald-400 font-bold">x</span>
                   <input
                     type="number"
-                    step="0.1"
+                    step="0.01"
                     min="0"
                     value={portion}
                     onChange={(e) => handlePortionChange(e.target.value)}
