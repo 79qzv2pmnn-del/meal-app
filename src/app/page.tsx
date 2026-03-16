@@ -144,7 +144,6 @@ export default function Home() {
   const [goals, setGoals] = useState<PFCGoals>(DEFAULT_GOALS);
   const [selectedDate, setSelectedDate] = useState<string>(toDateKey());
   const [showGoalSettings, setShowGoalSettings] = useState(false);
-  const [toast, setToast] = useState("");
   const [syncStatus, setSyncStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [syncError, setSyncError] = useState("");
   const [hasLoadedData, setHasLoadedData] = useState(false);
@@ -376,12 +375,6 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-gray-900 text-gray-100 p-4 md:p-8 font-sans pb-24">
-      {toast && (
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-gray-700 text-white text-sm px-5 py-2.5 rounded-full shadow-xl border border-gray-600 animate-in fade-in slide-in-from-top-2 duration-200 whitespace-nowrap">
-          {toast}
-        </div>
-      )}
-
       {showGoalSettings && (
         <GoalSettings
           goals={goals}
