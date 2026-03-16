@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { Meal, PFCGoals, Recipe, RecipeSet } from "../types";
 import MealInput from "../components/MealInput";
@@ -29,11 +29,6 @@ function migrateMeals(meals: Meal[]): Meal[] {
     ...meal,
     date: meal.date ?? toDateKey(new Date(meal.timestamp)),
   }));
-}
-
-async function readJsonFile<T>(file: File): Promise<T> {
-  const text = await file.text();
-  return JSON.parse(text) as T;
 }
 
 function LoginCard({
@@ -153,7 +148,6 @@ export default function Home() {
   const [syncStatus, setSyncStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [syncError, setSyncError] = useState("");
   const [hasLoadedData, setHasLoadedData] = useState(false);
-  const [isImporting, setIsImporting] = useState(false);
 
   const resetLocalData = () => {
     setMeals([]);
@@ -369,48 +363,6 @@ export default function Home() {
     await supabase.auth.signOut();
   };
 
-  const handleImportBackup = async (event: ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(event.target.files ?? []);
-    event.target.value = "";
-
-    if (files.length === 0) return;
-
-    const recipesFile = files.find((file) => file.name === "recipes.json");
-    const recipeSetsFile = files.find((file) => file.name === "recipe-sets.json");
-    const mealsFile = files.find((file) => file.name === "meals.json");
-
-    if (!recipesFile && !recipeSetsFile && !mealsFile) {
-      showToast("recipes.json / recipe-sets.json / meals.json を選んでください");
-      return;
-    }
-
-    try {
-      setIsImporting(true);
-
-      if (recipesFile) {
-        const importedRecipes = await readJsonFile<Recipe[]>(recipesFile);
-        setRecipes(importedRecipes);
-      }
-
-      if (recipeSetsFile) {
-        const importedRecipeSets = await readJsonFile<RecipeSet[]>(recipeSetsFile);
-        setRecipeSets(importedRecipeSets);
-      }
-
-      if (mealsFile) {
-        const importedMeals = await readJsonFile<Meal[]>(mealsFile);
-        setMeals(migrateMeals(importedMeals).sort((a, b) => b.timestamp - a.timestamp));
-      }
-
-      setHasLoadedData(true);
-      showToast("バックアップを読み込みました");
-    } catch {
-      showToast("バックアップの読み込みに失敗しました");
-    } finally {
-      setIsImporting(false);
-    }
-  };
-
   if (!isSupabaseConfigured) {
     return (
       <main className="min-h-screen bg-gray-950 text-gray-100 flex items-center justify-center p-6">
@@ -488,26 +440,14 @@ export default function Home() {
             </h1>
             <p className="text-sm text-gray-400 mt-1">{headerLabel}</p>
             <p className="text-xs text-gray-500 mt-2">
-              {session.user.email}
-              {syncStatus === "saving" && " ・ 保存中"}
-              {syncStatus === "saved" && " ・ 保存済み"}
-              {syncStatus === "error" && " ・ 保存エラー"}
+              {syncStatus === "saving" && "保存中"}
+              {syncStatus === "saved" && "保存済み"}
+              {syncStatus === "error" && "保存エラー"}
             </p>
             {syncError && <p className="text-xs text-red-400 mt-1">{syncError}</p>}
           </div>
 
           <div className="flex items-center gap-2">
-            <label className="text-xs bg-gray-950 hover:bg-gray-800 text-gray-300 px-4 py-2 rounded-lg border border-gray-700 transition font-medium cursor-pointer">
-              {isImporting ? "読込中..." : "バックアップ読込"}
-              <input
-                type="file"
-                accept=".json,application/json"
-                multiple
-                className="hidden"
-                onChange={handleImportBackup}
-                disabled={isImporting}
-              />
-            </label>
             <button
               onClick={() => setShowGoalSettings(true)}
               className="p-2 text-gray-400 hover:text-white transition-colors rounded-lg hover:bg-gray-800"
