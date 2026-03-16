@@ -24,29 +24,11 @@ interface MealAppRow {
   goals: PFCGoals | null;
 }
 
-interface MealAppExportPayload {
-  source: "MealApp";
-  version: 1;
-  exportedAt: string;
-  goals: PFCGoals;
-  meals: Meal[];
-}
-
 function migrateMeals(meals: Meal[]): Meal[] {
   return meals.map((meal) => ({
     ...meal,
     date: meal.date ?? toDateKey(new Date(meal.timestamp)),
   }));
-}
-
-function buildMachineExport(meals: Meal[], goals: PFCGoals): MealAppExportPayload {
-  return {
-    source: "MealApp",
-    version: 1,
-    exportedAt: new Date().toISOString(),
-    goals,
-    meals: [...meals].sort((a, b) => a.timestamp - b.timestamp),
-  };
 }
 
 function LoginCard({
@@ -292,11 +274,6 @@ export default function Home() {
   const totalF = selectedMeals.reduce((sum, meal) => sum + meal.fat, 0);
   const totalC = selectedMeals.reduce((sum, meal) => sum + meal.carbs, 0);
 
-  const showToast = (message: string) => {
-    setToast(message);
-    window.setTimeout(() => setToast(""), 3000);
-  };
-
   const handleAuthSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!supabase) return;
@@ -340,53 +317,6 @@ export default function Home() {
         .map((meal) => (meal.id === updatedMeal.id ? updatedMeal : meal))
         .sort((a, b) => b.timestamp - a.timestamp)
     );
-  };
-
-  const handleExport = () => {
-    if (selectedMeals.length === 0) {
-      showToast("この日の記録がありません");
-      return;
-    }
-
-    const label = new Date(`${selectedDate}T00:00:00`).toLocaleDateString("ja-JP");
-    let markdown = `# ${label} 食事記録\n\n`;
-
-    selectedMeals.forEach((meal) => {
-      const time = new Date(meal.timestamp).toLocaleTimeString("ja-JP", {
-        hour: "2-digit",
-        minute: "2-digit",
-      });
-      markdown += `### ${time} - ${meal.description.replace(/\n/g, " ")}\n`;
-      markdown += `- エネルギー: ${meal.calories}kcal\n`;
-      markdown += `- タンパク質: ${meal.protein}g\n`;
-      markdown += `- 脂質: ${meal.fat}g\n`;
-      markdown += `- 炭水化物: ${meal.carbs}g\n\n`;
-    });
-
-    markdown += "---\n";
-    markdown += "## 1日の合計（集計）\n";
-    markdown += `- **総カロリー: ${totalKcal}kcal**\n`;
-    markdown += `- P (タンパク質): ${totalP}g\n`;
-    markdown += `- F (脂質): ${totalF}g\n`;
-    markdown += `- C (炭水化物): ${totalC}g\n`;
-
-    navigator.clipboard
-      .writeText(markdown)
-      .then(() => showToast("食事記録をコピーしました"))
-      .catch(() => showToast("コピーに失敗しました"));
-  };
-
-  const handleMachineExport = () => {
-    if (meals.length === 0) {
-      showToast("まだ食事データがありません");
-      return;
-    }
-
-    const payload = buildMachineExport(meals, goals);
-    navigator.clipboard
-      .writeText(JSON.stringify(payload, null, 2))
-      .then(() => showToast("統合ツール用JSONをコピーしました"))
-      .catch(() => showToast("JSONのコピーに失敗しました"));
   };
 
   const handleSignOut = async () => {
@@ -488,18 +418,6 @@ export default function Home() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
               </svg>
-            </button>
-            <button
-              onClick={handleExport}
-              className="text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-4 py-2 rounded-lg border border-gray-700 transition flex items-center gap-2 font-medium"
-            >
-              その日をコピー
-            </button>
-            <button
-              onClick={handleMachineExport}
-              className="text-xs bg-emerald-900/40 hover:bg-emerald-800/60 text-emerald-200 px-4 py-2 rounded-lg border border-emerald-800 transition flex items-center gap-2 font-medium"
-            >
-              統合ツール用JSON
             </button>
             <button
               onClick={handleSignOut}
