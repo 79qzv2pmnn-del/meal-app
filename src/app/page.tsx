@@ -327,23 +327,21 @@ export default function Home() {
 
   const handleAddConditionEvent = () => {
     const description = conditionNote.trim() || conditionType;
+    const event: Meal = {
+      id: crypto.randomUUID(),
+      timestamp: new Date(`${selectedDate}T12:00:00`).getTime(),
+      date: selectedDate,
+      endDate: conditionEndDate || selectedDate,
+      description,
+      calories: 0,
+      protein: 0,
+      fat: 0,
+      carbs: 0,
+      category: "condition",
+      loggingStatus: conditionStatus,
+    };
     setMeals((prev) =>
-      [
-        {
-          id: crypto.randomUUID(),
-          timestamp: new Date(`${selectedDate}T12:00:00`).getTime(),
-          date: selectedDate,
-          endDate: conditionEndDate || selectedDate,
-          description,
-          calories: 0,
-          protein: 0,
-          fat: 0,
-          carbs: 0,
-          category: "condition",
-          loggingStatus: conditionStatus,
-        },
-        ...prev,
-      ].sort((a, b) => b.timestamp - a.timestamp)
+      [event, ...prev].sort((a, b) => b.timestamp - a.timestamp)
     );
     setConditionNote("");
     setConditionType("体調不良");
