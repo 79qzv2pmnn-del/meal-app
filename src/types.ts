@@ -1,3 +1,5 @@
+export type MealCategory = "meal" | "condition";
+
 export interface Meal {
     id: string;
     timestamp: number;
@@ -11,6 +13,9 @@ export interface Meal {
     isFromRecipe?: boolean;
     recipeId?: string;
     actualAmount?: number;
+    category?: MealCategory;
+    endDate?: string;
+    loggingStatus?: string;
 }
 
 export interface Recipe {

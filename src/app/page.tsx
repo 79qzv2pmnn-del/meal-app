@@ -28,7 +28,19 @@ function migrateMeals(meals: Meal[]): Meal[] {
   return meals.map((meal) => ({
     ...meal,
     date: meal.date ?? toDateKey(new Date(meal.timestamp)),
+    category: meal.category ?? "meal",
   }));
+}
+
+function isConditionEvent(meal: Meal): boolean {
+  return meal.category === "condition";
+}
+
+function eventCoversDate(meal: Meal, date: string): boolean {
+  if (!isConditionEvent(meal)) return false;
+  const start = meal.date;
+  const end = meal.endDate ?? meal.date;
+  return start <= date && date <= end;
 }
 
 function LoginCard({
@@ -147,6 +159,10 @@ export default function Home() {
   const [syncStatus, setSyncStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [syncError, setSyncError] = useState("");
   const [hasLoadedData, setHasLoadedData] = useState(false);
+  const [conditionType, setConditionType] = useState("体調不良");
+  const [conditionEndDate, setConditionEndDate] = useState<string>(toDateKey());
+  const [conditionStatus, setConditionStatus] = useState("記録停止");
+  const [conditionNote, setConditionNote] = useState("");
 
   const resetLocalData = () => {
     setMeals([]);
@@ -264,7 +280,12 @@ export default function Home() {
   }, [goals, hasLoadedData, meals, recipeSets, recipes, session]);
 
   const selectedMeals = useMemo(
-    () => meals.filter((meal) => meal.date === selectedDate),
+    () => meals.filter((meal) => meal.date === selectedDate && !isConditionEvent(meal)),
+    [meals, selectedDate]
+  );
+
+  const selectedConditionEvents = useMemo(
+    () => meals.filter((meal) => eventCoversDate(meal, selectedDate)),
     [meals, selectedDate]
   );
 
@@ -302,6 +323,32 @@ export default function Home() {
 
   const handleAddMeal = (meal: Meal) => {
     setMeals((prev) => [meal, ...prev].sort((a, b) => b.timestamp - a.timestamp));
+  };
+
+  const handleAddConditionEvent = () => {
+    const description = conditionNote.trim() || conditionType;
+    setMeals((prev) =>
+      [
+        {
+          id: crypto.randomUUID(),
+          timestamp: new Date(`${selectedDate}T12:00:00`).getTime(),
+          date: selectedDate,
+          endDate: conditionEndDate || selectedDate,
+          description,
+          calories: 0,
+          protein: 0,
+          fat: 0,
+          carbs: 0,
+          category: "condition",
+          loggingStatus: conditionStatus,
+        },
+        ...prev,
+      ].sort((a, b) => b.timestamp - a.timestamp)
+    );
+    setConditionNote("");
+    setConditionType("体調不良");
+    setConditionStatus("記録停止");
+    setConditionEndDate(selectedDate);
   };
 
   const handleDeleteMeal = (id: string) => {
@@ -458,6 +505,112 @@ export default function Home() {
             onChangeRecipes={setRecipes}
             onChangeRecipeSets={setRecipeSets}
           />
+        </section>
+
+        <section className="bg-gray-800 rounded-xl p-4 border border-gray-700 shadow-xl">
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-200">体調・記録イベント</h2>
+              <p className="text-xs text-gray-500 mt-1">風邪や記録停止の理由を残します。AIが空白期間を判断しやすくなります。</p>
+            </div>
+          </div>
+
+          <div className="grid md:grid-cols-4 gap-3">
+            <label className="flex flex-col gap-1">
+              <span className="text-xs text-gray-400">種別</span>
+              <select
+                value={conditionType}
+                onChange={(event) => setConditionType(event.target.value)}
+                className="bg-gray-900 border border-gray-700 rounded-lg p-2.5 text-sm text-white focus:border-emerald-500 focus:outline-none"
+              >
+                <option>体調不良</option>
+                <option>風邪</option>
+                <option>花粉症</option>
+                <option>多忙</option>
+                <option>旅行</option>
+                <option>記録漏れ</option>
+              </select>
+            </label>
+
+            <label className="flex flex-col gap-1">
+              <span className="text-xs text-gray-400">終了日</span>
+              <input
+                type="date"
+                value={conditionEndDate}
+                min={selectedDate}
+                onChange={(event) => setConditionEndDate(event.target.value)}
+                className="bg-gray-900 border border-gray-700 rounded-lg p-2.5 text-sm text-white focus:border-emerald-500 focus:outline-none"
+              />
+            </label>
+
+            <label className="flex flex-col gap-1">
+              <span className="text-xs text-gray-400">記録状態</span>
+              <select
+                value={conditionStatus}
+                onChange={(event) => setConditionStatus(event.target.value)}
+                className="bg-gray-900 border border-gray-700 rounded-lg p-2.5 text-sm text-white focus:border-emerald-500 focus:outline-none"
+              >
+                <option>記録停止</option>
+                <option>食事のみ停止</option>
+                <option>筋トレのみ停止</option>
+                <option>体重のみ停止</option>
+                <option>記録継続</option>
+              </select>
+            </label>
+
+            <label className="flex flex-col gap-1">
+              <span className="text-xs text-gray-400">メモ</span>
+              <input
+                value={conditionNote}
+                onChange={(event) => setConditionNote(event.target.value)}
+                placeholder="例: 風邪で寝込んだ"
+                className="bg-gray-900 border border-gray-700 rounded-lg p-2.5 text-sm text-white placeholder-gray-500 focus:border-emerald-500 focus:outline-none"
+              />
+            </label>
+          </div>
+
+          <button
+            type="button"
+            onClick={handleAddConditionEvent}
+            className="mt-3 bg-sky-600 hover:bg-sky-500 text-white font-bold py-2.5 px-4 rounded-lg transition-colors"
+          >
+            体調イベントを追加
+          </button>
+
+          <div className="mt-4 space-y-3">
+            {selectedConditionEvents.length === 0 ? (
+              <div className="text-sm text-gray-500">この日にかかる体調イベントはありません。</div>
+            ) : (
+              selectedConditionEvents.map((event) => (
+                <div key={event.id} className="bg-gray-900 border border-gray-700 rounded-xl p-3 flex items-start justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs bg-sky-900/50 text-sky-300 px-2 py-1 rounded border border-sky-800">
+                        {event.description}
+                      </span>
+                      <span className="text-xs text-gray-400">
+                        {event.date} 〜 {event.endDate ?? event.date}
+                      </span>
+                      {event.loggingStatus && (
+                        <span className="text-xs bg-gray-800 text-gray-300 px-2 py-1 rounded border border-gray-700">
+                          {event.loggingStatus}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleDeleteMeal(event.id)}
+                    className="text-gray-500 hover:text-red-400 transition-colors p-1"
+                    aria-label="削除"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
         </section>
 
         <section>
