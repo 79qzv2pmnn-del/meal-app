@@ -159,9 +159,8 @@ export default function Home() {
   const [syncStatus, setSyncStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [syncError, setSyncError] = useState("");
   const [hasLoadedData, setHasLoadedData] = useState(false);
-  const [conditionType, setConditionType] = useState("体調不良");
+  const [conditionStartDate, setConditionStartDate] = useState<string>(toDateKey());
   const [conditionEndDate, setConditionEndDate] = useState<string>(toDateKey());
-  const [conditionStatus, setConditionStatus] = useState("記録停止");
   const [conditionNote, setConditionNote] = useState("");
 
   const resetLocalData = () => {
@@ -326,26 +325,25 @@ export default function Home() {
   };
 
   const handleAddConditionEvent = () => {
-    const description = conditionNote.trim() || conditionType;
+    const description = conditionNote.trim() || "風邪";
     const event: Meal = {
       id: crypto.randomUUID(),
-      timestamp: new Date(`${selectedDate}T12:00:00`).getTime(),
-      date: selectedDate,
-      endDate: conditionEndDate || selectedDate,
+      timestamp: new Date(`${conditionStartDate}T12:00:00`).getTime(),
+      date: conditionStartDate,
+      endDate: conditionEndDate || conditionStartDate,
       description,
       calories: 0,
       protein: 0,
       fat: 0,
       carbs: 0,
       category: "condition",
-      loggingStatus: conditionStatus,
+      loggingStatus: "記録停止",
     };
     setMeals((prev) =>
       [event, ...prev].sort((a, b) => b.timestamp - a.timestamp)
     );
     setConditionNote("");
-    setConditionType("体調不良");
-    setConditionStatus("記録停止");
+    setConditionStartDate(selectedDate);
     setConditionEndDate(selectedDate);
   };
 
@@ -508,26 +506,21 @@ export default function Home() {
         <section className="bg-gray-800 rounded-xl p-4 border border-gray-700 shadow-xl">
           <div className="flex items-center justify-between gap-3 mb-3">
             <div>
-              <h2 className="text-lg font-semibold text-gray-200">体調・記録イベント</h2>
-              <p className="text-xs text-gray-500 mt-1">風邪や記録停止の理由を残します。AIが空白期間を判断しやすくなります。</p>
+              <h2 className="text-lg font-semibold text-gray-200">風邪をひいた期間</h2>
+              <p className="text-xs text-gray-500 mt-1">開始日と終了日をカレンダーで選んで残します。空白期間の理由を AI が判断しやすくなります。</p>
             </div>
           </div>
 
-          <div className="grid md:grid-cols-4 gap-3">
+          <div className="grid md:grid-cols-3 gap-3">
             <label className="flex flex-col gap-1">
-              <span className="text-xs text-gray-400">種別</span>
-              <select
-                value={conditionType}
-                onChange={(event) => setConditionType(event.target.value)}
+              <span className="text-xs text-gray-400">開始日</span>
+              <input
+                type="date"
+                value={conditionStartDate}
+                max={conditionEndDate}
+                onChange={(event) => setConditionStartDate(event.target.value)}
                 className="bg-gray-900 border border-gray-700 rounded-lg p-2.5 text-sm text-white focus:border-emerald-500 focus:outline-none"
-              >
-                <option>体調不良</option>
-                <option>風邪</option>
-                <option>花粉症</option>
-                <option>多忙</option>
-                <option>旅行</option>
-                <option>記録漏れ</option>
-              </select>
+              />
             </label>
 
             <label className="flex flex-col gap-1">
@@ -535,25 +528,10 @@ export default function Home() {
               <input
                 type="date"
                 value={conditionEndDate}
-                min={selectedDate}
+                min={conditionStartDate}
                 onChange={(event) => setConditionEndDate(event.target.value)}
                 className="bg-gray-900 border border-gray-700 rounded-lg p-2.5 text-sm text-white focus:border-emerald-500 focus:outline-none"
               />
-            </label>
-
-            <label className="flex flex-col gap-1">
-              <span className="text-xs text-gray-400">記録状態</span>
-              <select
-                value={conditionStatus}
-                onChange={(event) => setConditionStatus(event.target.value)}
-                className="bg-gray-900 border border-gray-700 rounded-lg p-2.5 text-sm text-white focus:border-emerald-500 focus:outline-none"
-              >
-                <option>記録停止</option>
-                <option>食事のみ停止</option>
-                <option>筋トレのみ停止</option>
-                <option>体重のみ停止</option>
-                <option>記録継続</option>
-              </select>
             </label>
 
             <label className="flex flex-col gap-1">
@@ -561,7 +539,7 @@ export default function Home() {
               <input
                 value={conditionNote}
                 onChange={(event) => setConditionNote(event.target.value)}
-                placeholder="例: 風邪で寝込んだ"
+                placeholder="例: 喉の痛み、発熱"
                 className="bg-gray-900 border border-gray-700 rounded-lg p-2.5 text-sm text-white placeholder-gray-500 focus:border-emerald-500 focus:outline-none"
               />
             </label>
@@ -572,7 +550,7 @@ export default function Home() {
             onClick={handleAddConditionEvent}
             className="mt-3 bg-sky-600 hover:bg-sky-500 text-white font-bold py-2.5 px-4 rounded-lg transition-colors"
           >
-            体調イベントを追加
+            風邪期間を保存
           </button>
 
           <div className="mt-4 space-y-3">
@@ -584,14 +562,14 @@ export default function Home() {
                   <div>
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-xs bg-sky-900/50 text-sky-300 px-2 py-1 rounded border border-sky-800">
-                        {event.description}
+                        風邪
                       </span>
                       <span className="text-xs text-gray-400">
                         {event.date} 〜 {event.endDate ?? event.date}
                       </span>
-                      {event.loggingStatus && (
+                      {event.description && event.description !== "風邪" && (
                         <span className="text-xs bg-gray-800 text-gray-300 px-2 py-1 rounded border border-gray-700">
-                          {event.loggingStatus}
+                          {event.description}
                         </span>
                       )}
                     </div>
