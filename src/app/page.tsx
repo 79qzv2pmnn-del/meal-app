@@ -17,6 +17,14 @@ const DEFAULT_GOALS: PFCGoals = {
   carbs: 300,
 };
 
+const CONDITION_PRESETS = [
+  { value: "風邪", label: "風邪" },
+  { value: "怪我", label: "怪我" },
+  { value: "腰痛", label: "腰痛" },
+  { value: "疲労", label: "疲労" },
+  { value: "その他", label: "その他" },
+] as const;
+
 interface MealAppRow {
   meals: Meal[] | null;
   recipes: Recipe[] | null;
@@ -41,6 +49,19 @@ function eventCoversDate(meal: Meal, date: string): boolean {
   const start = meal.date;
   const end = meal.endDate ?? meal.date;
   return start <= date && date <= end;
+}
+
+function getConditionBadgeLabel(description: string): string {
+  const [type] = description.split(":");
+  return type.trim() || "体調不良";
+}
+
+function getConditionDetail(description: string): string | null {
+  const colonIndex = description.indexOf(":");
+  if (colonIndex >= 0) {
+    return description.slice(colonIndex + 1).trim() || null;
+  }
+  return CONDITION_PRESETS.some((preset) => preset.value === description) ? null : description;
 }
 
 function LoginCard({
@@ -161,6 +182,7 @@ export default function Home() {
   const [hasLoadedData, setHasLoadedData] = useState(false);
   const [conditionStartDate, setConditionStartDate] = useState<string>(toDateKey());
   const [conditionEndDate, setConditionEndDate] = useState<string>(toDateKey());
+  const [conditionType, setConditionType] = useState<(typeof CONDITION_PRESETS)[number]["value"]>("風邪");
   const [conditionNote, setConditionNote] = useState("");
 
   const resetLocalData = () => {
@@ -325,7 +347,11 @@ export default function Home() {
   };
 
   const handleAddConditionEvent = () => {
-    const description = conditionNote.trim() || "風邪";
+    const trimmedNote = conditionNote.trim();
+    const description =
+      conditionType === "その他"
+        ? (trimmedNote || "その他")
+        : (trimmedNote ? `${conditionType}: ${trimmedNote}` : conditionType);
     const event: Meal = {
       id: crypto.randomUUID(),
       timestamp: new Date(`${conditionStartDate}T12:00:00`).getTime(),
@@ -342,6 +368,7 @@ export default function Home() {
     setMeals((prev) =>
       [event, ...prev].sort((a, b) => b.timestamp - a.timestamp)
     );
+    setConditionType("風邪");
     setConditionNote("");
     setConditionStartDate(selectedDate);
     setConditionEndDate(selectedDate);
@@ -506,12 +533,12 @@ export default function Home() {
         <section className="bg-gray-800 rounded-xl p-4 border border-gray-700 shadow-xl">
           <div className="flex items-center justify-between gap-3 mb-3">
             <div>
-              <h2 className="text-lg font-semibold text-gray-200">風邪をひいた期間</h2>
-              <p className="text-xs text-gray-500 mt-1">開始日と終了日をカレンダーで選んで残します。空白期間の理由を AI が判断しやすくなります。</p>
+              <h2 className="text-lg font-semibold text-gray-200">休養や不調の期間</h2>
+              <p className="text-xs text-gray-500 mt-1">風邪や怪我などで記録を止めたい期間を残します。空白期間の理由を AI が判断しやすくなります。</p>
             </div>
           </div>
 
-          <div className="grid md:grid-cols-3 gap-3">
+          <div className="grid md:grid-cols-4 gap-3">
             <label className="flex flex-col gap-1">
               <span className="text-xs text-gray-400">開始日</span>
               <input
@@ -535,11 +562,26 @@ export default function Home() {
             </label>
 
             <label className="flex flex-col gap-1">
+              <span className="text-xs text-gray-400">種類</span>
+              <select
+                value={conditionType}
+                onChange={(event) => setConditionType(event.target.value as (typeof CONDITION_PRESETS)[number]["value"])}
+                className="bg-gray-900 border border-gray-700 rounded-lg p-2.5 text-sm text-white focus:border-emerald-500 focus:outline-none"
+              >
+                {CONDITION_PRESETS.map((preset) => (
+                  <option key={preset.value} value={preset.value}>
+                    {preset.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="flex flex-col gap-1">
               <span className="text-xs text-gray-400">メモ</span>
               <input
                 value={conditionNote}
                 onChange={(event) => setConditionNote(event.target.value)}
-                placeholder="例: 喉の痛み、発熱"
+                placeholder={conditionType === "その他" ? "例: 胃腸炎、寝不足" : "例: ぎっくり腰、喉の痛み"}
                 className="bg-gray-900 border border-gray-700 rounded-lg p-2.5 text-sm text-white placeholder-gray-500 focus:border-emerald-500 focus:outline-none"
               />
             </label>
@@ -550,7 +592,7 @@ export default function Home() {
             onClick={handleAddConditionEvent}
             className="mt-3 bg-sky-600 hover:bg-sky-500 text-white font-bold py-2.5 px-4 rounded-lg transition-colors"
           >
-            風邪期間を保存
+            休養期間を保存
           </button>
 
           <div className="mt-4 space-y-3">
@@ -562,14 +604,14 @@ export default function Home() {
                   <div>
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-xs bg-sky-900/50 text-sky-300 px-2 py-1 rounded border border-sky-800">
-                        風邪
+                        {getConditionBadgeLabel(event.description)}
                       </span>
                       <span className="text-xs text-gray-400">
                         {event.date} 〜 {event.endDate ?? event.date}
                       </span>
-                      {event.description && event.description !== "風邪" && (
+                      {getConditionDetail(event.description) && (
                         <span className="text-xs bg-gray-800 text-gray-300 px-2 py-1 rounded border border-gray-700">
-                          {event.description}
+                          {getConditionDetail(event.description)}
                         </span>
                       )}
                     </div>
