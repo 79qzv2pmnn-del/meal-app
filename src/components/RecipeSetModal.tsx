@@ -19,7 +19,7 @@ interface Props {
 
 export default function RecipeSetModal({ set, recipes, onRecord, onClose }: Props) {
   const [items, setItems] = useState(
-    set.items.map(item => ({ ...item, enabled: true }))
+    set.items.map(item => ({ ...item, enabled: true, amountStr: item.amount.toString() }))
   );
 
   const getRecipe = (id: string) => recipes.find(r => r.id === id);
@@ -39,7 +39,7 @@ export default function RecipeSetModal({ set, recipes, onRecord, onClose }: Prop
   const totals = items
     .filter(i => i.enabled)
     .reduce((acc, item) => {
-      const n = calcNutrition(item.recipeId, item.amount);
+      const n = calcNutrition(item.recipeId, Number(item.amountStr) || 0);
       return {
         calories: acc.calories + n.calories,
         protein: Math.round((acc.protein + n.protein) * 10) / 10,
@@ -53,7 +53,7 @@ export default function RecipeSetModal({ set, recipes, onRecord, onClose }: Prop
       .filter(i => i.enabled)
       .map(i => {
         const r = getRecipe(i.recipeId);
-        return r ? `${r.name}${i.amount}${r.unit}` : "";
+        return r ? `${r.name}${Number(i.amountStr) || 0}${r.unit}` : "";
       })
       .filter(Boolean)
       .join("、");
@@ -72,7 +72,7 @@ export default function RecipeSetModal({ set, recipes, onRecord, onClose }: Prop
           {items.map((item, idx) => {
             const recipe = getRecipe(item.recipeId);
             if (!recipe) return null;
-            const n = calcNutrition(item.recipeId, item.amount);
+            const n = calcNutrition(item.recipeId, Number(item.amountStr) || 0);
             return (
               <div
                 key={item.recipeId}
@@ -90,8 +90,12 @@ export default function RecipeSetModal({ set, recipes, onRecord, onClose }: Prop
                     type="number"
                     step="0.01"
                     min="0"
-                    value={item.amount}
-                    onChange={e => setItems(items.map((it, i) => i === idx ? { ...it, amount: Number(e.target.value) } : it))}
+                    value={item.amountStr}
+                    onChange={e => {
+                      const raw = e.target.value.replace(/^0+(\d)/, "$1");
+                      setItems(items.map((it, i) => i === idx ? { ...it, amountStr: raw, amount: Number(raw) || 0 } : it));
+                    }}
+                    onFocus={e => e.target.select()}
                     disabled={!item.enabled}
                     className="w-16 bg-gray-800 border border-gray-700 rounded p-1 text-center text-white text-sm focus:border-emerald-500 focus:outline-none disabled:opacity-40"
                   />
