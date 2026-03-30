@@ -11,10 +11,10 @@ import GoalSettings from "../components/GoalSettings";
 import { isSupabaseConfigured, supabase } from "../lib/supabase";
 
 const DEFAULT_GOALS: PFCGoals = {
-  calories: 2500,
+  calories: 3300,
   protein: 150,
-  fat: 70,
-  carbs: 300,
+  fat: 80,
+  carbs: 400,
 };
 
 const CONDITION_PRESETS = [
@@ -184,6 +184,9 @@ export default function Home() {
   const [conditionEndDate, setConditionEndDate] = useState<string>(toDateKey());
   const [conditionType, setConditionType] = useState<(typeof CONDITION_PRESETS)[number]["value"]>("風邪");
   const [conditionNote, setConditionNote] = useState("");
+  const [showConditionSection, setShowConditionSection] = useState(false);
+  const [copySource, setCopySource] = useState<Meal | null>(null);
+  const [copyAmount, setCopyAmount] = useState("");
 
   const resetLocalData = () => {
     setMeals([]);
@@ -388,6 +391,42 @@ export default function Home() {
     );
   };
 
+  const handleCopyMeal = (meal: Meal) => {
+    setCopySource(meal);
+    setCopyAmount(meal.actualAmount?.toString() ?? "");
+  };
+
+  const handleConfirmCopy = () => {
+    if (!copySource) return;
+    const base = copySource.actualAmount;
+    const newAmt = copyAmount === "" ? null : Number(copyAmount);
+    let calories = copySource.calories;
+    let protein = copySource.protein;
+    let fat = copySource.fat;
+    let carbs = copySource.carbs;
+    if (base && base > 0 && newAmt !== null && newAmt > 0) {
+      const ratio = newAmt / base;
+      calories = Math.round(calories * ratio);
+      protein = Math.round(protein * ratio * 10) / 10;
+      fat = Math.round(fat * ratio * 10) / 10;
+      carbs = Math.round(carbs * ratio * 10) / 10;
+    }
+    const copied: Meal = {
+      ...copySource,
+      id: crypto.randomUUID(),
+      timestamp: Date.now(),
+      date: selectedDate,
+      calories,
+      protein,
+      fat,
+      carbs,
+      actualAmount: newAmt !== null && newAmt > 0 ? newAmt : copySource.actualAmount,
+    };
+    setMeals((prev) => [copied, ...prev].sort((a, b) => b.timestamp - a.timestamp));
+    setCopySource(null);
+    setCopyAmount("");
+  };
+
   const handleSignOut = async () => {
     if (!supabase) return;
     await supabase.auth.signOut();
@@ -451,6 +490,79 @@ export default function Home() {
           onSave={setGoals}
           onClose={() => setShowGoalSettings(false)}
         />
+      )}
+
+      {copySource && (
+        <div
+          className="fixed inset-0 z-50 bg-black/70 flex items-end sm:items-center justify-center p-4"
+          onClick={() => setCopySource(null)}
+        >
+          <div
+            className="bg-gray-800 rounded-2xl p-6 w-full max-w-sm border border-gray-700 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-white font-bold text-lg">記録をコピー</h3>
+              <button onClick={() => setCopySource(null)} className="text-gray-400 hover:text-white transition-colors">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <p className="text-sm text-gray-300 leading-relaxed mb-4 whitespace-pre-wrap">{copySource.description}</p>
+
+            <div className="bg-gray-900 rounded-xl p-3 flex gap-4 text-sm mb-4">
+              <div className="flex flex-col items-center">
+                <span className="text-[10px] text-gray-500">Kcal</span>
+                <span className="font-semibold text-white">{copySource.calories}</span>
+              </div>
+              <div className="flex flex-col items-center border-l border-gray-700 pl-4">
+                <span className="text-[10px] text-gray-500">P</span>
+                <span className="font-semibold text-blue-400">{copySource.protein}</span>
+              </div>
+              <div className="flex flex-col items-center border-l border-gray-700 pl-4">
+                <span className="text-[10px] text-gray-500">F</span>
+                <span className="font-semibold text-yellow-400">{copySource.fat}</span>
+              </div>
+              <div className="flex flex-col items-center border-l border-gray-700 pl-4">
+                <span className="text-[10px] text-gray-500">C</span>
+                <span className="font-semibold text-emerald-400">{copySource.carbs}</span>
+              </div>
+            </div>
+
+            {copySource.actualAmount && (
+              <label className="flex flex-col gap-1.5 mb-4">
+                <span className="text-xs text-gray-400">
+                  元の量: {copySource.actualAmount}g　→　今回よそった量 (g)
+                </span>
+                <input
+                  type="number"
+                  value={copyAmount}
+                  onChange={(e) => setCopyAmount(e.target.value)}
+                  placeholder={copySource.actualAmount.toString()}
+                  className="bg-gray-900 border border-gray-700 rounded-lg p-2.5 text-white text-sm focus:border-emerald-500 focus:outline-none"
+                  autoFocus
+                />
+                {copyAmount && Number(copyAmount) > 0 && copySource.actualAmount > 0 && (() => {
+                  const ratio = Number(copyAmount) / copySource.actualAmount;
+                  return (
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      → {Math.round(copySource.calories * ratio)} kcal / P {Math.round(copySource.protein * ratio * 10) / 10}g / F {Math.round(copySource.fat * ratio * 10) / 10}g / C {Math.round(copySource.carbs * ratio * 10) / 10}g
+                    </p>
+                  );
+                })()}
+              </label>
+            )}
+
+            <button
+              onClick={handleConfirmCopy}
+              className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-xl transition-colors"
+            >
+              この内容で追加
+            </button>
+          </div>
+        </div>
       )}
 
       <main className="max-w-2xl mx-auto flex flex-col gap-5">
@@ -530,14 +642,25 @@ export default function Home() {
           />
         </section>
 
-        <section className="bg-gray-800 rounded-xl p-4 border border-gray-700 shadow-xl">
-          <div className="flex items-center justify-between gap-3 mb-3">
+        <section className="bg-gray-800 rounded-xl border border-gray-700 shadow-xl overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setShowConditionSection((v) => !v)}
+            className="w-full flex items-center justify-between gap-3 p-4 text-left hover:bg-gray-750 transition-colors"
+          >
             <div>
               <h2 className="text-lg font-semibold text-gray-200">休養や不調の期間</h2>
-              <p className="text-xs text-gray-500 mt-1">風邪や怪我などで記録を止めたい期間を残します。空白期間の理由を AI が判断しやすくなります。</p>
+              <p className="text-xs text-gray-500 mt-0.5">風邪や怪我などで記録を止めたい期間を残します。</p>
             </div>
-          </div>
+            <svg
+              className={`w-5 h-5 text-gray-400 flex-shrink-0 transition-transform ${showConditionSection ? "rotate-180" : ""}`}
+              fill="none" stroke="currentColor" viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
 
+          {showConditionSection && <div className="px-4 pb-4">
           <div className="grid md:grid-cols-4 gap-3">
             <label className="flex flex-col gap-1">
               <span className="text-xs text-gray-400">開始日</span>
@@ -629,6 +752,7 @@ export default function Home() {
               ))
             )}
           </div>
+          </div>}
         </section>
 
         <section>
@@ -638,7 +762,7 @@ export default function Home() {
             </h2>
             <span className="text-xs text-gray-500">{selectedMeals.length}件</span>
           </div>
-          <MealList meals={selectedMeals} onDelete={handleDeleteMeal} onUpdate={handleUpdateMeal} />
+          <MealList meals={selectedMeals} onDelete={handleDeleteMeal} onUpdate={handleUpdateMeal} onCopy={handleCopyMeal} />
         </section>
       </main>
     </div>
