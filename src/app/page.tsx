@@ -236,6 +236,9 @@ export default function Home() {
 
     if (!session) return;
 
+    // トークンリフレッシュ等で同一ユーザーのセッションが更新されても再ロードしない
+    if (hasLoadedData) return;
+
     let cancelled = false;
     const client = supabase;
     const userId = session.user.id;
@@ -270,7 +273,7 @@ export default function Home() {
     return () => {
       cancelled = true;
     };
-  }, [session]);
+  }, [session, hasLoadedData]);
 
   useEffect(() => {
     if (!supabase || !session || !hasLoadedData) return;
