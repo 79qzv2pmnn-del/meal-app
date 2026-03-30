@@ -186,6 +186,7 @@ export default function Home() {
   const [conditionNote, setConditionNote] = useState("");
   const [showConditionSection, setShowConditionSection] = useState(false);
   const [copySource, setCopySource] = useState<Meal | null>(null);
+  const [copyBaseAmount, setCopyBaseAmount] = useState("");
   const [copyAmount, setCopyAmount] = useState("");
 
   const resetLocalData = () => {
@@ -393,18 +394,19 @@ export default function Home() {
 
   const handleCopyMeal = (meal: Meal) => {
     setCopySource(meal);
-    setCopyAmount(meal.actualAmount?.toString() ?? "");
+    setCopyBaseAmount(meal.actualAmount?.toString() ?? "");
+    setCopyAmount("");
   };
 
   const handleConfirmCopy = () => {
     if (!copySource) return;
-    const base = copySource.actualAmount;
-    const newAmt = copyAmount === "" ? null : Number(copyAmount);
+    const base = Number(copyBaseAmount);
+    const newAmt = Number(copyAmount);
     let calories = copySource.calories;
     let protein = copySource.protein;
     let fat = copySource.fat;
     let carbs = copySource.carbs;
-    if (base && base > 0 && newAmt !== null && newAmt > 0) {
+    if (base > 0 && newAmt > 0) {
       const ratio = newAmt / base;
       calories = Math.round(calories * ratio);
       protein = Math.round(protein * ratio * 10) / 10;
@@ -420,10 +422,11 @@ export default function Home() {
       protein,
       fat,
       carbs,
-      actualAmount: newAmt !== null && newAmt > 0 ? newAmt : copySource.actualAmount,
+      actualAmount: newAmt > 0 ? newAmt : (base > 0 ? base : copySource.actualAmount),
     };
     setMeals((prev) => [copied, ...prev].sort((a, b) => b.timestamp - a.timestamp));
     setCopySource(null);
+    setCopyBaseAmount("");
     setCopyAmount("");
   };
 
@@ -492,78 +495,90 @@ export default function Home() {
         />
       )}
 
-      {copySource && (
-        <div
-          className="fixed inset-0 z-50 bg-black/70 flex items-end sm:items-center justify-center p-4"
-          onClick={() => setCopySource(null)}
-        >
+      {copySource && (() => {
+        const base = Number(copyBaseAmount);
+        const newAmt = Number(copyAmount);
+        const canScale = base > 0 && newAmt > 0;
+        const ratio = canScale ? newAmt / base : 1;
+        const previewKcal = canScale ? Math.round(copySource.calories * ratio) : copySource.calories;
+        const previewP = canScale ? Math.round(copySource.protein * ratio * 10) / 10 : copySource.protein;
+        const previewF = canScale ? Math.round(copySource.fat * ratio * 10) / 10 : copySource.fat;
+        const previewC = canScale ? Math.round(copySource.carbs * ratio * 10) / 10 : copySource.carbs;
+        return (
           <div
-            className="bg-gray-800 rounded-2xl p-6 w-full max-w-sm border border-gray-700 shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
+            className="fixed inset-0 z-50 bg-black/70 flex items-end sm:items-center justify-center p-4"
+            onClick={() => setCopySource(null)}
           >
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-white font-bold text-lg">記録をコピー</h3>
-              <button onClick={() => setCopySource(null)} className="text-gray-400 hover:text-white transition-colors">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
+            <div
+              className="bg-gray-800 rounded-2xl p-6 w-full max-w-sm border border-gray-700 shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-white font-bold text-lg">記録をコピー</h3>
+                <button onClick={() => setCopySource(null)} className="text-gray-400 hover:text-white transition-colors">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <p className="text-sm text-gray-300 leading-relaxed mb-4 whitespace-pre-wrap">{copySource.description}</p>
+
+              <div className="grid grid-cols-2 gap-2 mb-4">
+                <label className="flex flex-col gap-1">
+                  <span className="text-xs text-gray-400">元の量 (g)</span>
+                  <input
+                    type="number"
+                    min="0"
+                    value={copyBaseAmount}
+                    onChange={(e) => setCopyBaseAmount(e.target.value)}
+                    placeholder="例: 200"
+                    className="bg-gray-900 border border-gray-700 rounded-lg p-2.5 text-white text-sm focus:border-emerald-500 focus:outline-none"
+                  />
+                </label>
+                <label className="flex flex-col gap-1">
+                  <span className="text-xs text-emerald-400">今回の量 (g)</span>
+                  <input
+                    type="number"
+                    min="0"
+                    value={copyAmount}
+                    onChange={(e) => setCopyAmount(e.target.value)}
+                    placeholder="例: 180"
+                    className="bg-gray-900 border border-emerald-500/50 rounded-lg p-2.5 text-white text-sm focus:border-emerald-500 focus:outline-none"
+                    autoFocus
+                  />
+                </label>
+              </div>
+
+              <div className="bg-gray-900 rounded-xl p-3 flex gap-4 text-sm mb-4">
+                <div className="flex flex-col items-center">
+                  <span className="text-[10px] text-gray-500">Kcal</span>
+                  <span className="font-semibold text-white">{previewKcal}</span>
+                </div>
+                <div className="flex flex-col items-center border-l border-gray-700 pl-4">
+                  <span className="text-[10px] text-gray-500">P</span>
+                  <span className="font-semibold text-blue-400">{previewP}</span>
+                </div>
+                <div className="flex flex-col items-center border-l border-gray-700 pl-4">
+                  <span className="text-[10px] text-gray-500">F</span>
+                  <span className="font-semibold text-yellow-400">{previewF}</span>
+                </div>
+                <div className="flex flex-col items-center border-l border-gray-700 pl-4">
+                  <span className="text-[10px] text-gray-500">C</span>
+                  <span className="font-semibold text-emerald-400">{previewC}</span>
+                </div>
+              </div>
+
+              <button
+                onClick={handleConfirmCopy}
+                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-xl transition-colors"
+              >
+                この内容で追加
               </button>
             </div>
-
-            <p className="text-sm text-gray-300 leading-relaxed mb-4 whitespace-pre-wrap">{copySource.description}</p>
-
-            <div className="bg-gray-900 rounded-xl p-3 flex gap-4 text-sm mb-4">
-              <div className="flex flex-col items-center">
-                <span className="text-[10px] text-gray-500">Kcal</span>
-                <span className="font-semibold text-white">{copySource.calories}</span>
-              </div>
-              <div className="flex flex-col items-center border-l border-gray-700 pl-4">
-                <span className="text-[10px] text-gray-500">P</span>
-                <span className="font-semibold text-blue-400">{copySource.protein}</span>
-              </div>
-              <div className="flex flex-col items-center border-l border-gray-700 pl-4">
-                <span className="text-[10px] text-gray-500">F</span>
-                <span className="font-semibold text-yellow-400">{copySource.fat}</span>
-              </div>
-              <div className="flex flex-col items-center border-l border-gray-700 pl-4">
-                <span className="text-[10px] text-gray-500">C</span>
-                <span className="font-semibold text-emerald-400">{copySource.carbs}</span>
-              </div>
-            </div>
-
-            {copySource.actualAmount && (
-              <label className="flex flex-col gap-1.5 mb-4">
-                <span className="text-xs text-gray-400">
-                  元の量: {copySource.actualAmount}g　→　今回よそった量 (g)
-                </span>
-                <input
-                  type="number"
-                  value={copyAmount}
-                  onChange={(e) => setCopyAmount(e.target.value)}
-                  placeholder={copySource.actualAmount.toString()}
-                  className="bg-gray-900 border border-gray-700 rounded-lg p-2.5 text-white text-sm focus:border-emerald-500 focus:outline-none"
-                  autoFocus
-                />
-                {copyAmount && Number(copyAmount) > 0 && copySource.actualAmount > 0 && (() => {
-                  const ratio = Number(copyAmount) / copySource.actualAmount;
-                  return (
-                    <p className="text-xs text-gray-500 mt-0.5">
-                      → {Math.round(copySource.calories * ratio)} kcal / P {Math.round(copySource.protein * ratio * 10) / 10}g / F {Math.round(copySource.fat * ratio * 10) / 10}g / C {Math.round(copySource.carbs * ratio * 10) / 10}g
-                    </p>
-                  );
-                })()}
-              </label>
-            )}
-
-            <button
-              onClick={handleConfirmCopy}
-              className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-xl transition-colors"
-            >
-              この内容で追加
-            </button>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       <main className="max-w-2xl mx-auto flex flex-col gap-5">
         <header className="flex items-start justify-between border-b border-gray-800 pb-4 gap-3">

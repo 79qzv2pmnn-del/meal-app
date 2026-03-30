@@ -163,7 +163,7 @@ export default function MealInput({
               </span>
 
               <div className="flex items-center gap-2 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0">
-                {selectedRecipe && (
+                {selectedRecipe ? (
                   <>
                     <div className="flex items-center gap-1">
                       <input
@@ -178,6 +178,18 @@ export default function MealInput({
                     </div>
                     <span className="text-xs text-gray-600">or</span>
                   </>
+                ) : (
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="number"
+                      min="0"
+                      value={actualAmount}
+                      onChange={(e) => setActualAmount(e.target.value)}
+                      placeholder="量"
+                      className="w-16 bg-gray-800 border border-emerald-500/50 rounded py-1 px-2 text-center text-white text-sm focus:border-emerald-500 focus:outline-none"
+                    />
+                    <span className="text-xs text-gray-400">g</span>
+                  </div>
                 )}
 
                 <div className="flex items-center gap-1">
