@@ -630,15 +630,15 @@ export default function Home() {
           </div>
           <div className="bg-gray-800 p-3 md:p-4 rounded-xl border border-gray-700 text-center shadow-sm">
             <p className="text-[10px] md:text-xs text-gray-400 uppercase tracking-wider font-medium">P (g)</p>
-            <p className="text-lg md:text-2xl font-bold text-blue-400 mt-1">{totalP}</p>
+            <p className="text-lg md:text-2xl font-bold text-blue-400 mt-1">{Math.round(totalP * 10) / 10}</p>
           </div>
           <div className="bg-gray-800 p-3 md:p-4 rounded-xl border border-gray-700 text-center shadow-sm">
             <p className="text-[10px] md:text-xs text-gray-400 uppercase tracking-wider font-medium">F (g)</p>
-            <p className="text-lg md:text-2xl font-bold text-yellow-400 mt-1">{totalF}</p>
+            <p className="text-lg md:text-2xl font-bold text-yellow-400 mt-1">{Math.round(totalF * 10) / 10}</p>
           </div>
           <div className="bg-gray-800 p-3 md:p-4 rounded-xl border border-gray-700 text-center shadow-sm">
             <p className="text-[10px] md:text-xs text-gray-400 uppercase tracking-wider font-medium">C (g)</p>
-            <p className="text-lg md:text-2xl font-bold text-emerald-400 mt-1">{totalC}</p>
+            <p className="text-lg md:text-2xl font-bold text-emerald-400 mt-1">{Math.round(totalC * 10) / 10}</p>
           </div>
         </section>
 
