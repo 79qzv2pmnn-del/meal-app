@@ -90,17 +90,24 @@ export default function MealInput({
     setActualAmount(recipe.baseAmount.toString());
   };
 
+  const sanitizeNumber = (value: string) => {
+    // 先頭の余分な0を除去（"080" → "80"、"0.5"はそのまま）
+    return value.replace(/^0+(\d)/, "$1");
+  };
+
   const handleActualAmountChange = (value: string) => {
-    setActualAmount(value);
-    if (selectedRecipe && value) {
-      setPortion((Number(value) / selectedRecipe.baseAmount).toFixed(2));
+    const sanitized = sanitizeNumber(value);
+    setActualAmount(sanitized);
+    if (selectedRecipe && sanitized) {
+      setPortion((Number(sanitized) / selectedRecipe.baseAmount).toFixed(2));
     }
   };
 
   const handlePortionChange = (value: string) => {
-    setPortion(value);
-    if (selectedRecipe && value) {
-      setActualAmount((Number(value) * selectedRecipe.baseAmount).toFixed(0));
+    const sanitized = sanitizeNumber(value);
+    setPortion(sanitized);
+    if (selectedRecipe && sanitized) {
+      setActualAmount((Number(sanitized) * selectedRecipe.baseAmount).toFixed(0));
     }
   };
 
@@ -171,7 +178,7 @@ export default function MealInput({
                         step="0.01"
                         min="0"
                         value={actualAmount}
-                        onChange={(e) => handleActualAmountChange(e.target.value)}
+                        onChange={(e) => handleActualAmountChange(sanitizeNumber(e.target.value))}
                         className="w-16 bg-gray-800 border border-emerald-500/50 rounded py-1 px-2 text-center text-white text-sm focus:border-emerald-500 focus:outline-none"
                       />
                       <span className="text-xs text-gray-400">{selectedRecipe.unit}</span>
@@ -184,7 +191,7 @@ export default function MealInput({
                       type="number"
                       min="0"
                       value={actualAmount}
-                      onChange={(e) => setActualAmount(e.target.value)}
+                      onChange={(e) => setActualAmount(sanitizeNumber(e.target.value))}
                       placeholder="量"
                       className="w-16 bg-gray-800 border border-emerald-500/50 rounded py-1 px-2 text-center text-white text-sm focus:border-emerald-500 focus:outline-none"
                     />
@@ -199,7 +206,7 @@ export default function MealInput({
                     step="0.01"
                     min="0"
                     value={portion}
-                    onChange={(e) => handlePortionChange(e.target.value)}
+                    onChange={(e) => handlePortionChange(sanitizeNumber(e.target.value))}
                     className="w-16 bg-gray-800 border border-emerald-500/50 rounded py-1 px-2 text-center text-white text-sm focus:border-emerald-500 focus:outline-none"
                   />
                   <span className="text-xs text-gray-400">倍</span>
@@ -215,19 +222,19 @@ export default function MealInput({
             <div className="grid grid-cols-4 gap-2">
               <div className="flex flex-col gap-1">
                 <label className="text-[10px] text-gray-400 uppercase ml-1">Kcal</label>
-                <input type="number" value={manualCal} onChange={(e) => setManualCal(e.target.value)} className="bg-gray-800 border border-gray-700/50 rounded p-2 text-center text-white text-sm focus:border-emerald-500 focus:outline-none" />
+                <input type="number" value={manualCal} onChange={(e) => setManualCal(sanitizeNumber(e.target.value))} className="bg-gray-800 border border-gray-700/50 rounded p-2 text-center text-white text-sm focus:border-emerald-500 focus:outline-none" />
               </div>
               <div className="flex flex-col gap-1">
                 <label className="text-[10px] text-gray-400 uppercase ml-1">P</label>
-                <input type="number" value={manualP} onChange={(e) => setManualP(e.target.value)} className="bg-gray-800 border border-gray-700/50 rounded p-2 text-center text-blue-400 text-sm focus:border-emerald-500 focus:outline-none" />
+                <input type="number" value={manualP} onChange={(e) => setManualP(sanitizeNumber(e.target.value))} className="bg-gray-800 border border-gray-700/50 rounded p-2 text-center text-blue-400 text-sm focus:border-emerald-500 focus:outline-none" />
               </div>
               <div className="flex flex-col gap-1">
                 <label className="text-[10px] text-gray-400 uppercase ml-1">F</label>
-                <input type="number" value={manualF} onChange={(e) => setManualF(e.target.value)} className="bg-gray-800 border border-gray-700/50 rounded p-2 text-center text-yellow-400 text-sm focus:border-emerald-500 focus:outline-none" />
+                <input type="number" value={manualF} onChange={(e) => setManualF(sanitizeNumber(e.target.value))} className="bg-gray-800 border border-gray-700/50 rounded p-2 text-center text-yellow-400 text-sm focus:border-emerald-500 focus:outline-none" />
               </div>
               <div className="flex flex-col gap-1">
                 <label className="text-[10px] text-gray-400 uppercase ml-1">C</label>
-                <input type="number" value={manualC} onChange={(e) => setManualC(e.target.value)} className="bg-gray-800 border border-gray-700/50 rounded p-2 text-center text-emerald-400 text-sm focus:border-emerald-500 focus:outline-none" />
+                <input type="number" value={manualC} onChange={(e) => setManualC(sanitizeNumber(e.target.value))} className="bg-gray-800 border border-gray-700/50 rounded p-2 text-center text-emerald-400 text-sm focus:border-emerald-500 focus:outline-none" />
               </div>
             </div>
           </div>

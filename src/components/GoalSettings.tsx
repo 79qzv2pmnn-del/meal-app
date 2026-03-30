@@ -17,6 +17,8 @@ export default function GoalSettings({ goals, onSave, onClose }: Props) {
     carbs: goals.carbs.toString(),
   });
 
+  const sanitizeNumber = (value: string) => value.replace(/^0+(\d)/, "$1");
+
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     onSave({
@@ -56,7 +58,7 @@ export default function GoalSettings({ goals, onSave, onClose }: Props) {
               <input
                 type="number"
                 value={form.calories}
-                onChange={(e) => setForm({ ...form, calories: e.target.value })}
+                onChange={(e) => setForm({ ...form, calories: sanitizeNumber(e.target.value) })}
                 className="bg-gray-900 border border-gray-700 rounded-lg p-2.5 text-white text-center text-sm focus:border-emerald-500 focus:outline-none"
               />
             </div>
@@ -65,7 +67,7 @@ export default function GoalSettings({ goals, onSave, onClose }: Props) {
               <input
                 type="number"
                 value={form.protein}
-                onChange={(e) => setForm({ ...form, protein: e.target.value })}
+                onChange={(e) => setForm({ ...form, protein: sanitizeNumber(e.target.value) })}
                 className="bg-gray-900 border border-gray-700 rounded-lg p-2.5 text-blue-400 text-center text-sm focus:border-blue-500 focus:outline-none"
               />
             </div>
@@ -74,7 +76,7 @@ export default function GoalSettings({ goals, onSave, onClose }: Props) {
               <input
                 type="number"
                 value={form.fat}
-                onChange={(e) => setForm({ ...form, fat: e.target.value })}
+                onChange={(e) => setForm({ ...form, fat: sanitizeNumber(e.target.value) })}
                 className="bg-gray-900 border border-gray-700 rounded-lg p-2.5 text-yellow-400 text-center text-sm focus:border-yellow-500 focus:outline-none"
               />
             </div>
@@ -83,7 +85,7 @@ export default function GoalSettings({ goals, onSave, onClose }: Props) {
               <input
                 type="number"
                 value={form.carbs}
-                onChange={(e) => setForm({ ...form, carbs: e.target.value })}
+                onChange={(e) => setForm({ ...form, carbs: sanitizeNumber(e.target.value) })}
                 className="bg-gray-900 border border-gray-700 rounded-lg p-2.5 text-emerald-400 text-center text-sm focus:border-emerald-500 focus:outline-none"
               />
             </div>
