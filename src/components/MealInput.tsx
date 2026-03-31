@@ -117,7 +117,13 @@ export default function MealInput({
   const sanitizeNumber = (value: string) => value.replace(/^0+(\d)/, "$1");
 
   const handleRecipeSelect = (recipe: Recipe) => {
-    setSelectedEntries((prev) => [...prev, { recipe, amount: recipe.baseAmount.toString() }]);
+    setSelectedEntries((prev) => {
+      const exists = prev.some((e) => e.recipe.id === recipe.id);
+      if (exists) {
+        return prev.filter((e) => e.recipe.id !== recipe.id);
+      }
+      return [...prev, { recipe, amount: recipe.baseAmount.toString() }];
+    });
   };
 
   const handleRemoveEntry = (index: number) => {
