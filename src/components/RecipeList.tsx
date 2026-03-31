@@ -23,6 +23,9 @@ export default function RecipeList({ recipes, onChange, onSelectRecipe, selected
   const [carbs, setCarbs] = useState("");
   const [baseAmount, setBaseAmount] = useState("100");
   const [unit, setUnit] = useState("g");
+  // 編集開始時点の基準量・栄養素を保持（スケール計算用）
+  const [originalBaseAmount, setOriginalBaseAmount] = useState(100);
+  const [originalNutrition, setOriginalNutrition] = useState({ calories: 0, protein: 0, fat: 0, carbs: 0 });
 
   const sanitizeNumber = (value: string) => value.replace(/^0+(\d)/, "$1");
 
@@ -75,7 +78,22 @@ export default function RecipeList({ recipes, onChange, onSelectRecipe, selected
     setCarbs(recipe.carbs.toString());
     setBaseAmount(recipe.baseAmount.toString());
     setUnit(recipe.unit);
+    setOriginalBaseAmount(recipe.baseAmount);
+    setOriginalNutrition({ calories: recipe.calories, protein: recipe.protein, fat: recipe.fat, carbs: recipe.carbs });
     setIsAdding(true);
+  };
+
+  const handleBaseAmountChange = (value: string) => {
+    setBaseAmount(sanitizeNumber(value));
+    if (!editingId) return;
+    const newAmount = Number(value);
+    if (newAmount > 0 && originalBaseAmount > 0) {
+      const ratio = newAmount / originalBaseAmount;
+      setCalories(Math.round(originalNutrition.calories * ratio).toString());
+      setProtein((Math.round(originalNutrition.protein * ratio * 10) / 10).toString());
+      setFat((Math.round(originalNutrition.fat * ratio * 10) / 10).toString());
+      setCarbs((Math.round(originalNutrition.carbs * ratio * 10) / 10).toString());
+    }
   };
 
   const handleDelete = (id: string, e: React.MouseEvent) => {
@@ -170,8 +188,11 @@ export default function RecipeList({ recipes, onChange, onSelectRecipe, selected
 
             <div className="flex gap-4 mt-2">
               <div className="flex-1 flex flex-col gap-1">
-                <label className="text-[10px] text-gray-400 uppercase">基準量 (数値)</label>
-                <input type="number" value={baseAmount} onChange={(e) => setBaseAmount(sanitizeNumber(e.target.value))} placeholder="100" className="bg-gray-800 border-b border-gray-600 p-2 text-white text-sm focus:outline-none focus:border-emerald-500" required />
+                <label className="text-[10px] text-gray-400 uppercase">
+                  基準量 (数値)
+                  {editingId && <span className="ml-1 text-emerald-400 normal-case">← 変更すると栄養素を自動換算</span>}
+                </label>
+                <input type="number" value={baseAmount} onChange={(e) => handleBaseAmountChange(e.target.value)} placeholder="100" className="bg-gray-800 border-b border-gray-600 p-2 text-white text-sm focus:outline-none focus:border-emerald-500" required />
               </div>
               <div className="flex-x flex flex-col gap-1">
                 <label className="text-[10px] text-gray-400 uppercase">単位</label>
