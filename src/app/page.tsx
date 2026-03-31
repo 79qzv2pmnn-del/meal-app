@@ -8,6 +8,7 @@ import MealList from "../components/MealList";
 import DateNavigator, { toDateKey } from "../components/DateNavigator";
 import PFCProgress from "../components/PFCProgress";
 import GoalSettings from "../components/GoalSettings";
+import AIConsultModal from "../components/AIConsultModal";
 import { isSupabaseConfigured, supabase } from "../lib/supabase";
 
 const DEFAULT_GOALS: PFCGoals = {
@@ -177,6 +178,7 @@ export default function Home() {
   const [goals, setGoals] = useState<PFCGoals>(DEFAULT_GOALS);
   const [selectedDate, setSelectedDate] = useState<string>(toDateKey());
   const [showGoalSettings, setShowGoalSettings] = useState(false);
+  const [showAIConsult, setShowAIConsult] = useState(false);
   const [syncStatus, setSyncStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [syncError, setSyncError] = useState("");
   const [hasLoadedData, setHasLoadedData] = useState(false);
@@ -498,6 +500,16 @@ export default function Home() {
         />
       )}
 
+      {showAIConsult && (
+        <AIConsultModal
+          goals={goals}
+          todayTotals={{ calories: totalKcal, protein: totalP, fat: totalF, carbs: totalC }}
+          recipes={recipes}
+          recipeSets={recipeSets}
+          onClose={() => setShowAIConsult(false)}
+        />
+      )}
+
       {copySource && (() => {
         const base = Number(copyBaseAmount);
         const newAmt = Number(copyAmount);
@@ -602,6 +614,15 @@ export default function Home() {
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowAIConsult(true)}
+              className="p-2 text-gray-400 hover:text-emerald-400 transition-colors rounded-lg hover:bg-gray-800"
+              title="AIに相談"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+              </svg>
+            </button>
             <button
               onClick={() => setShowGoalSettings(true)}
               className="p-2 text-gray-400 hover:text-white transition-colors rounded-lg hover:bg-gray-800"
