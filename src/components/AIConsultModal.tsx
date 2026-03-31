@@ -79,32 +79,29 @@ export default function AIConsultModal({ goals, todayTotals, recipes, recipeSets
     carbs: goals.carbs - todayTotals.carbs - plannedTotals.carbs,
   };
 
-  const toggleRecipeCheck = (id: string) => {
+  const toggleRecipeCheck = (recipe: Recipe) => {
+    const alreadyChecked = checkedRecipeIds.has(recipe.id);
     setCheckedRecipeIds((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      if (alreadyChecked) next.delete(recipe.id);
+      else next.add(recipe.id);
       return next;
     });
-  };
-
-  const addCheckedRecipes = () => {
-    const newItems: PlannedItem[] = recipes
-      .filter((r) => checkedRecipeIds.has(r.id))
-      .map((recipe) => {
-        const nutrition = scaleNutrition(recipe, recipe.baseAmount);
-        return {
-          id: crypto.randomUUID(),
-          label: recipe.name,
-          amount: recipe.baseAmount,
-          unit: recipe.unit,
-          ...nutrition,
-        };
+    if (alreadyChecked) {
+      // チェックを外したら前提リストからも除去（同名の最後の1件を削除）
+      setPlannedItems((prev) => {
+        const idx = [...prev].reverse().findIndex((item) => item.label === recipe.name);
+        if (idx === -1) return prev;
+        const realIdx = prev.length - 1 - idx;
+        return prev.filter((_, i) => i !== realIdx);
       });
-    setPlannedItems((prev) => [...prev, ...newItems]);
-    setCheckedRecipeIds(new Set());
-    setShowRecipePicker(false);
-    setRecipeSearch("");
+    } else {
+      const nutrition = scaleNutrition(recipe, recipe.baseAmount);
+      setPlannedItems((prev) => [
+        ...prev,
+        { id: crypto.randomUUID(), label: recipe.name, amount: recipe.baseAmount, unit: recipe.unit, ...nutrition },
+      ]);
+    }
   };
 
   const addRecipeSet = (set: RecipeSet) => {
@@ -148,7 +145,18 @@ export default function AIConsultModal({ goals, todayTotals, recipes, recipeSets
   };
 
   const removeItem = (id: string) => {
-    setPlannedItems((prev) => prev.filter((item) => item.id !== id));
+    const item = plannedItems.find((i) => i.id === id);
+    if (item) {
+      const recipe = recipes.find((r) => r.name === item.label);
+      if (recipe) {
+        setCheckedRecipeIds((prev) => {
+          const next = new Set(prev);
+          next.delete(recipe.id);
+          return next;
+        });
+      }
+    }
+    setPlannedItems((prev) => prev.filter((i) => i.id !== id));
   };
 
   const generatePrompt = () => {
@@ -332,7 +340,7 @@ export default function AIConsultModal({ goals, todayTotals, recipes, recipeSets
                 {filteredRecipes.length === 0 ? (
                   <p className="text-xs text-gray-500 py-2 text-center">レシピがありません</p>
                 ) : (
-                  <div className="flex flex-col gap-1 max-h-48 overflow-y-auto mb-3">
+                  <div className="flex flex-col gap-1 max-h-48 overflow-y-auto">
                     {filteredRecipes.map((recipe) => {
                       const checked = checkedRecipeIds.has(recipe.id);
                       return (
@@ -343,7 +351,7 @@ export default function AIConsultModal({ goals, todayTotals, recipes, recipeSets
                           <input
                             type="checkbox"
                             checked={checked}
-                            onChange={() => toggleRecipeCheck(recipe.id)}
+                            onChange={() => toggleRecipeCheck(recipe)}
                             className="w-4 h-4 accent-emerald-500 flex-shrink-0"
                           />
                           <div className="flex-1 min-w-0">
@@ -357,13 +365,6 @@ export default function AIConsultModal({ goals, todayTotals, recipes, recipeSets
                     })}
                   </div>
                 )}
-                <button
-                  onClick={addCheckedRecipes}
-                  disabled={checkedRecipeIds.size === 0}
-                  className="w-full bg-emerald-700 hover:bg-emerald-600 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold py-2 rounded-lg transition-colors"
-                >
-                  {checkedRecipeIds.size > 0 ? `${checkedRecipeIds.size}件を追加` : "レシピを選択してください"}
-                </button>
               </div>
             )}
 
