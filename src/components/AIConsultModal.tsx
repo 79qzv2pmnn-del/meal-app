@@ -323,7 +323,7 @@ export default function AIConsultModal({ goals, todayTotals, recipes, recipeSets
             {showRecipePicker && (
               <div className="mt-3 bg-gray-900 rounded-xl border border-gray-700 p-3">
                 <div className="flex items-center justify-between mb-2">
-                  <p className="text-xs text-gray-400 font-medium">マイレシピを選択（複数可）</p>
+                  <p className="text-xs text-gray-400 font-medium">マイレシピを選択</p>
                   <button onClick={() => { setShowRecipePicker(false); setCheckedRecipeIds(new Set()); setRecipeSearch(""); }} className="text-gray-500 hover:text-white">
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -344,23 +344,21 @@ export default function AIConsultModal({ goals, todayTotals, recipes, recipeSets
                     {filteredRecipes.map((recipe) => {
                       const checked = checkedRecipeIds.has(recipe.id);
                       return (
-                        <label
+                        <button
                           key={recipe.id}
-                          className={`flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-colors ${checked ? "bg-emerald-900/30" : "hover:bg-gray-700"}`}
+                          onClick={() => toggleRecipeCheck(recipe)}
+                          className={`flex items-center justify-between gap-3 px-3 py-2 rounded-lg transition-colors text-left w-full ${checked ? "bg-emerald-900/40 border border-emerald-700/50" : "hover:bg-gray-700 border border-transparent"}`}
                         >
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={() => toggleRecipeCheck(recipe)}
-                            className="w-4 h-4 accent-emerald-500 flex-shrink-0"
-                          />
                           <div className="flex-1 min-w-0">
                             <p className="text-sm text-white">{recipe.name}</p>
                             <p className="text-xs text-gray-500">
                               {recipe.baseAmount}{recipe.unit} — {recipe.calories}kcal / P{recipe.protein}g / F{recipe.fat}g / C{recipe.carbs}g
                             </p>
                           </div>
-                        </label>
+                          {checked && (
+                            <span className="text-xs text-emerald-400 font-medium flex-shrink-0">選択中</span>
+                          )}
+                        </button>
                       );
                     })}
                   </div>
