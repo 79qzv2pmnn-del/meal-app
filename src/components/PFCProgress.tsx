@@ -68,26 +68,30 @@ export default function PFCProgress({ goals, actual }: Props) {
   return (
     <div className="bg-gray-800/50 rounded-xl border border-gray-700/50 p-4">
       <p className="text-xs text-gray-500 font-medium mb-3 uppercase tracking-wider">
-        目標達成率
+        目標まで
       </p>
       <div className="flex flex-col gap-3">
-        {items.map((item) => (
-          <div key={item.label} className="flex flex-col gap-1.5">
-            <div className="flex justify-between items-center text-xs">
-              <span className="text-gray-400 font-medium w-6">{item.label}</span>
-              <span>
-                <span className={`font-bold ${item.valueColor}`}>{item.value}</span>
-                <span className="text-gray-600"> / {item.max}</span>
-                {item.max > 0 && (
-                  <span className="text-gray-600 ml-1">
-                    ({Math.round((item.value / item.max) * 100)}%)
+        {items.map((item) => {
+          const remaining = item.max - item.value;
+          const isOver = remaining < 0;
+          return (
+            <div key={item.label} className="flex flex-col gap-1.5">
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-gray-400 font-medium w-6">{item.label}</span>
+                <span className="flex items-center gap-2">
+                  <span>
+                    <span className={`font-bold ${item.valueColor}`}>{item.value}</span>
+                    <span className="text-gray-600"> / {item.max}</span>
                   </span>
-                )}
-              </span>
+                  <span className={`font-semibold ${isOver ? "text-red-400" : "text-gray-400"}`}>
+                    {isOver ? `+${Math.abs(remaining)}超過` : `残り${remaining}`}
+                  </span>
+                </span>
+              </div>
+              <ProgressBar value={item.value} max={item.max} color={item.color} />
             </div>
-            <ProgressBar value={item.value} max={item.max} color={item.color} />
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
