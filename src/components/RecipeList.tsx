@@ -7,9 +7,10 @@ interface Props {
   recipes: Recipe[];
   onChange: (recipes: Recipe[]) => void;
   onSelectRecipe: (recipe: Recipe) => void;
+  selectedRecipeIds?: string[];
 }
 
-export default function RecipeList({ recipes, onChange, onSelectRecipe }: Props) {
+export default function RecipeList({ recipes, onChange, onSelectRecipe, selectedRecipeIds = [] }: Props) {
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -193,7 +194,7 @@ export default function RecipeList({ recipes, onChange, onSelectRecipe }: Props)
             <div
               key={recipe.id}
               onClick={() => onSelectRecipe(recipe)}
-              className="bg-gray-900 border border-gray-700 hover:border-emerald-500/50 hover:bg-gray-800 rounded-md p-2 cursor-pointer group transition-all flex flex-col justify-between min-h-[60px] sm:min-h-[70px]"
+              className={`border rounded-md p-2 cursor-pointer group transition-all flex flex-col justify-between min-h-[60px] sm:min-h-[70px] ${selectedRecipeIds.includes(recipe.id) ? "bg-emerald-900/30 border-emerald-500/60" : "bg-gray-900 border-gray-700 hover:border-emerald-500/50 hover:bg-gray-800"}`}
             >
               <div className="flex justify-between items-start mb-1">
                 <h3 className="font-bold text-gray-200 text-xs truncate mr-1" title={recipe.name}>{recipe.name}</h3>
