@@ -33,6 +33,63 @@ interface MealAppRow {
   goals: PFCGoals | null;
 }
 
+interface LocalBackupSnapshot {
+  version: 1;
+  userId: string;
+  savedAt: string;
+  meals: Meal[];
+  recipes: Recipe[];
+  recipeSets: RecipeSet[];
+  goals: PFCGoals;
+}
+
+function getBackupKey(userId: string) {
+  return `mealapp_backup:${userId}`;
+}
+
+function readLocalBackup(userId: string): LocalBackupSnapshot | null {
+  if (typeof window === "undefined") return null;
+
+  const raw = window.localStorage.getItem(getBackupKey(userId));
+  if (!raw) return null;
+
+  try {
+    const parsed = JSON.parse(raw) as Partial<LocalBackupSnapshot>;
+    if (
+      parsed?.version !== 1 ||
+      parsed.userId !== userId ||
+      !Array.isArray(parsed.meals) ||
+      !Array.isArray(parsed.recipes) ||
+      !Array.isArray(parsed.recipeSets) ||
+      !parsed.goals ||
+      typeof parsed.savedAt !== "string"
+    ) {
+      return null;
+    }
+
+    return {
+      version: 1,
+      userId,
+      savedAt: parsed.savedAt,
+      meals: migrateMeals(parsed.meals as Meal[]),
+      recipes: parsed.recipes as Recipe[],
+      recipeSets: parsed.recipeSets as RecipeSet[],
+      goals: parsed.goals as PFCGoals,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function writeLocalBackup(snapshot: LocalBackupSnapshot) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(getBackupKey(snapshot.userId), JSON.stringify(snapshot));
+}
+
+function hasMeaningfulData(snapshot: Pick<LocalBackupSnapshot, "meals" | "recipes" | "recipeSets">) {
+  return snapshot.meals.length > 0 || snapshot.recipes.length > 0 || snapshot.recipeSets.length > 0;
+}
+
 function migrateMeals(meals: Meal[]): Meal[] {
   return meals.map((meal) => ({
     ...meal,
@@ -182,6 +239,10 @@ export default function Home() {
   const [syncStatus, setSyncStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [syncError, setSyncError] = useState("");
   const [hasLoadedData, setHasLoadedData] = useState(false);
+  const [canSyncToCloud, setCanSyncToCloud] = useState(false);
+  const [localBackup, setLocalBackup] = useState<LocalBackupSnapshot | null>(null);
+  const [isUsingLocalBackup, setIsUsingLocalBackup] = useState(false);
+  const [isRestoringBackup, setIsRestoringBackup] = useState(false);
   const [conditionStartDate, setConditionStartDate] = useState<string>(toDateKey());
   const [conditionEndDate, setConditionEndDate] = useState<string>(toDateKey());
   const [conditionType, setConditionType] = useState<(typeof CONDITION_PRESETS)[number]["value"]>("風邪");
@@ -197,8 +258,33 @@ export default function Home() {
     setRecipeSets([]);
     setGoals(DEFAULT_GOALS);
     setHasLoadedData(false);
+    setCanSyncToCloud(false);
+    setLocalBackup(null);
+    setIsUsingLocalBackup(false);
+    setIsRestoringBackup(false);
     setSyncStatus("idle");
     setSyncError("");
+  };
+
+  const applySnapshotToState = (snapshot: Pick<LocalBackupSnapshot, "meals" | "recipes" | "recipeSets" | "goals">) => {
+    setMeals(migrateMeals(snapshot.meals));
+    setRecipes(snapshot.recipes);
+    setRecipeSets(snapshot.recipeSets);
+    setGoals(snapshot.goals);
+  };
+
+  const persistLocalBackup = (userId: string, snapshot: Pick<LocalBackupSnapshot, "meals" | "recipes" | "recipeSets" | "goals">) => {
+    const nextBackup: LocalBackupSnapshot = {
+      version: 1,
+      userId,
+      savedAt: new Date().toISOString(),
+      meals: snapshot.meals,
+      recipes: snapshot.recipes,
+      recipeSets: snapshot.recipeSets,
+      goals: snapshot.goals,
+    };
+    writeLocalBackup(nextBackup);
+    setLocalBackup(nextBackup);
   };
 
   useEffect(() => {
@@ -247,7 +333,12 @@ export default function Home() {
 
     async function loadData() {
       setIsBooting(true);
+      setCanSyncToCloud(false);
+      setIsUsingLocalBackup(false);
       setSyncError("");
+
+      const backup = readLocalBackup(userId);
+      setLocalBackup(backup);
 
       const { data, error } = await client
         .from("mealapp_data")
@@ -258,15 +349,30 @@ export default function Home() {
       if (cancelled) return;
 
       if (error) {
-        setSyncError("クラウド上のデータを読めませんでした");
+        setSyncStatus("error");
+        if (backup && hasMeaningfulData(backup)) {
+          applySnapshotToState(backup);
+          setHasLoadedData(true);
+          setIsUsingLocalBackup(true);
+          setSyncError("クラウド上のデータを読めなかったため、この端末のバックアップを表示しています。内容を確認して「この端末のバックアップをクラウドへ戻す」を押せます。");
+        } else {
+          setSyncError("クラウド上のデータを読めませんでした。空データは保存していません。再読み込みしてください。");
+        }
       } else {
-        setMeals(migrateMeals(data?.meals ?? []));
-        setRecipes(data?.recipes ?? []);
-        setRecipeSets(data?.recipe_sets ?? []);
-        setGoals(data?.goals ?? DEFAULT_GOALS);
+        const cloudSnapshot = {
+          meals: migrateMeals(data?.meals ?? []),
+          recipes: data?.recipes ?? [],
+          recipeSets: data?.recipe_sets ?? [],
+          goals: data?.goals ?? DEFAULT_GOALS,
+        };
+        applySnapshotToState(cloudSnapshot);
+        setCanSyncToCloud(true);
+        setHasLoadedData(true);
+        setIsUsingLocalBackup(false);
+        setSyncStatus("idle");
+        persistLocalBackup(userId, cloudSnapshot);
       }
 
-      setHasLoadedData(true);
       setIsBooting(false);
     }
 
@@ -278,7 +384,7 @@ export default function Home() {
   }, [session, hasLoadedData]);
 
   useEffect(() => {
-    if (!supabase || !session || !hasLoadedData) return;
+    if (!supabase || !session || !hasLoadedData || !canSyncToCloud) return;
 
     const client = supabase;
     const userId = session.user.id;
@@ -304,10 +410,12 @@ export default function Home() {
 
       setSyncStatus("saved");
       setSyncError("");
+      persistLocalBackup(userId, { meals, recipes, recipeSets, goals });
+      setIsUsingLocalBackup(false);
     }, 800);
 
     return () => window.clearTimeout(timer);
-  }, [goals, hasLoadedData, meals, recipeSets, recipes, session]);
+  }, [canSyncToCloud, goals, hasLoadedData, meals, recipeSets, recipes, session]);
 
   const selectedMeals = useMemo(
     () => meals.filter((meal) => meal.date === selectedDate && !isConditionEvent(meal)),
@@ -438,6 +546,49 @@ export default function Home() {
   const handleSignOut = async () => {
     if (!supabase) return;
     await supabase.auth.signOut();
+  };
+
+  const handleRestoreLocalBackup = async () => {
+    if (!supabase || !session || !localBackup) return;
+
+    setIsRestoringBackup(true);
+    setSyncStatus("saving");
+    setSyncError("");
+
+    const snapshot = {
+      meals: localBackup.meals,
+      recipes: localBackup.recipes,
+      recipeSets: localBackup.recipeSets,
+      goals: localBackup.goals,
+    };
+
+    const { error } = await supabase.from("mealapp_data").upsert(
+      {
+        user_id: session.user.id,
+        meals: snapshot.meals,
+        recipes: snapshot.recipes,
+        recipe_sets: snapshot.recipeSets,
+        goals: snapshot.goals,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "user_id" }
+    );
+
+    if (error) {
+      setSyncStatus("error");
+      setSyncError("この端末のバックアップをクラウドへ戻せませんでした。通信を確認してもう一度試してください。");
+      setIsRestoringBackup(false);
+      return;
+    }
+
+    applySnapshotToState(snapshot);
+    persistLocalBackup(session.user.id, snapshot);
+    setHasLoadedData(true);
+    setCanSyncToCloud(true);
+    setIsUsingLocalBackup(false);
+    setSyncStatus("saved");
+    setSyncError("この端末のバックアップをクラウドへ戻しました。");
+    setIsRestoringBackup(false);
   };
 
   if (!isSupabaseConfigured) {
@@ -611,6 +762,11 @@ export default function Home() {
               {syncStatus === "error" && "保存エラー"}
             </p>
             {syncError && <p className="text-xs text-red-400 mt-1">{syncError}</p>}
+            {localBackup && hasMeaningfulData(localBackup) && (
+              <p className="text-xs text-gray-500 mt-1">
+                この端末のバックアップ: {new Date(localBackup.savedAt).toLocaleString("ja-JP")}
+              </p>
+            )}
           </div>
 
           <div className="flex items-center gap-2">
@@ -641,6 +797,26 @@ export default function Home() {
             </button>
           </div>
         </header>
+
+        {localBackup && hasMeaningfulData(localBackup) && (isUsingLocalBackup || !canSyncToCloud) && (
+          <section className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4">
+            <h2 className="text-sm font-semibold text-amber-200">この端末に残っているバックアップがあります</h2>
+            <p className="text-xs text-amber-100/80 mt-2 leading-5">
+              保存日時: {new Date(localBackup.savedAt).toLocaleString("ja-JP")}
+            </p>
+            <p className="text-xs text-amber-100/80 mt-1 leading-5">
+              記録 {localBackup.meals.length} 件 / マイレシピ {localBackup.recipes.length} 件 / 定番セット {localBackup.recipeSets.length} 件
+            </p>
+            <button
+              type="button"
+              onClick={handleRestoreLocalBackup}
+              disabled={isRestoringBackup}
+              className="mt-3 bg-amber-400 hover:bg-amber-300 disabled:opacity-50 disabled:cursor-not-allowed text-gray-950 text-sm font-semibold px-4 py-2 rounded-xl transition-colors"
+            >
+              {isRestoringBackup ? "復元中..." : "この端末のバックアップをクラウドへ戻す"}
+            </button>
+          </section>
+        )}
 
         <DateNavigator selectedDate={selectedDate} onChange={setSelectedDate} />
 
