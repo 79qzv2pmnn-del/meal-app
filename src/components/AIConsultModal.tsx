@@ -51,6 +51,7 @@ export default function AIConsultModal({ goals, todayTotals, recipes, recipeSets
   const [showManualForm, setShowManualForm] = useState(false);
   const [copied, setCopied] = useState(false);
   const [recipeSearch, setRecipeSearch] = useState("");
+  const [checkedRecipeIds, setCheckedRecipeIds] = useState<Set<string>>(new Set());
 
   // 計画済みの合計
   const plannedTotals = plannedItems.reduce(
@@ -78,16 +79,30 @@ export default function AIConsultModal({ goals, todayTotals, recipes, recipeSets
     carbs: goals.carbs - todayTotals.carbs - plannedTotals.carbs,
   };
 
-  const addRecipe = (recipe: Recipe) => {
-    const nutrition = scaleNutrition(recipe, recipe.baseAmount);
-    const item: PlannedItem = {
-      id: crypto.randomUUID(),
-      label: recipe.name,
-      amount: recipe.baseAmount,
-      unit: recipe.unit,
-      ...nutrition,
-    };
-    setPlannedItems((prev) => [...prev, item]);
+  const toggleRecipeCheck = (id: string) => {
+    setCheckedRecipeIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const addCheckedRecipes = () => {
+    const newItems: PlannedItem[] = recipes
+      .filter((r) => checkedRecipeIds.has(r.id))
+      .map((recipe) => {
+        const nutrition = scaleNutrition(recipe, recipe.baseAmount);
+        return {
+          id: crypto.randomUUID(),
+          label: recipe.name,
+          amount: recipe.baseAmount,
+          unit: recipe.unit,
+          ...nutrition,
+        };
+      });
+    setPlannedItems((prev) => [...prev, ...newItems]);
+    setCheckedRecipeIds(new Set());
     setShowRecipePicker(false);
     setRecipeSearch("");
   };
@@ -181,7 +196,9 @@ export default function AIConsultModal({ goals, todayTotals, recipes, recipeSets
     }
 
     lines.push("");
-    lines.push("上記の残り栄養素にできるだけ近づくような食事を提案してください。マイレシピの中から使えるものがあれば優先的に提案してください。");
+    lines.push("上記の残り栄養素にできるだけ近づくような食事を提案してください。");
+    lines.push("カロリーよりもP・F・C（タンパク質・脂質・炭水化物）のグラム数を優先して近づけてください。カロリーはPFCから逆算されるため、PFCが合えばカロリーの多少のズレは問題ありません。");
+    lines.push("マイレシピの中から使えるものがあれば優先的に提案してください。");
 
     return lines.join("\n");
   };
@@ -298,8 +315,8 @@ export default function AIConsultModal({ goals, todayTotals, recipes, recipeSets
             {showRecipePicker && (
               <div className="mt-3 bg-gray-900 rounded-xl border border-gray-700 p-3">
                 <div className="flex items-center justify-between mb-2">
-                  <p className="text-xs text-gray-400 font-medium">マイレシピを選択</p>
-                  <button onClick={() => setShowRecipePicker(false)} className="text-gray-500 hover:text-white">
+                  <p className="text-xs text-gray-400 font-medium">マイレシピを選択（複数可）</p>
+                  <button onClick={() => { setShowRecipePicker(false); setCheckedRecipeIds(new Set()); setRecipeSearch(""); }} className="text-gray-500 hover:text-white">
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                     </svg>
@@ -315,21 +332,38 @@ export default function AIConsultModal({ goals, todayTotals, recipes, recipeSets
                 {filteredRecipes.length === 0 ? (
                   <p className="text-xs text-gray-500 py-2 text-center">レシピがありません</p>
                 ) : (
-                  <div className="flex flex-col gap-1 max-h-48 overflow-y-auto">
-                    {filteredRecipes.map((recipe) => (
-                      <button
-                        key={recipe.id}
-                        onClick={() => addRecipe(recipe)}
-                        className="text-left px-3 py-2 rounded-lg hover:bg-gray-700 transition-colors"
-                      >
-                        <p className="text-sm text-white">{recipe.name}</p>
-                        <p className="text-xs text-gray-500">
-                          {recipe.baseAmount}{recipe.unit} — {recipe.calories}kcal / P{recipe.protein}g / F{recipe.fat}g / C{recipe.carbs}g
-                        </p>
-                      </button>
-                    ))}
+                  <div className="flex flex-col gap-1 max-h-48 overflow-y-auto mb-3">
+                    {filteredRecipes.map((recipe) => {
+                      const checked = checkedRecipeIds.has(recipe.id);
+                      return (
+                        <label
+                          key={recipe.id}
+                          className={`flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-colors ${checked ? "bg-emerald-900/30" : "hover:bg-gray-700"}`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => toggleRecipeCheck(recipe.id)}
+                            className="w-4 h-4 accent-emerald-500 flex-shrink-0"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm text-white">{recipe.name}</p>
+                            <p className="text-xs text-gray-500">
+                              {recipe.baseAmount}{recipe.unit} — {recipe.calories}kcal / P{recipe.protein}g / F{recipe.fat}g / C{recipe.carbs}g
+                            </p>
+                          </div>
+                        </label>
+                      );
+                    })}
                   </div>
                 )}
+                <button
+                  onClick={addCheckedRecipes}
+                  disabled={checkedRecipeIds.size === 0}
+                  className="w-full bg-emerald-700 hover:bg-emerald-600 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold py-2 rounded-lg transition-colors"
+                >
+                  {checkedRecipeIds.size > 0 ? `${checkedRecipeIds.size}件を追加` : "レシピを選択してください"}
+                </button>
               </div>
             )}
 
