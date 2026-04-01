@@ -14,6 +14,8 @@ export default function RecipeList({ recipes, onChange, onSelectRecipe, selected
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [draggingRecipeId, setDraggingRecipeId] = useState<string | null>(null);
+  const [dragOverRecipeId, setDragOverRecipeId] = useState<string | null>(null);
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -101,6 +103,49 @@ export default function RecipeList({ recipes, onChange, onSelectRecipe, selected
     if (confirm("このマイレシピを削除しますか？")) {
       onChange(recipes.filter((recipe) => recipe.id !== id));
     }
+  };
+
+  const handleDragStart = (recipeId: string) => {
+    if (searchQuery.trim()) return;
+    setDraggingRecipeId(recipeId);
+    setDragOverRecipeId(recipeId);
+  };
+
+  const handleDragOver = (event: React.DragEvent<HTMLDivElement>, recipeId: string) => {
+    if (!draggingRecipeId || searchQuery.trim()) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    if (dragOverRecipeId !== recipeId) {
+      setDragOverRecipeId(recipeId);
+    }
+  };
+
+  const handleDrop = (targetRecipeId: string) => {
+    if (!draggingRecipeId || draggingRecipeId === targetRecipeId || searchQuery.trim()) {
+      setDraggingRecipeId(null);
+      setDragOverRecipeId(null);
+      return;
+    }
+
+    const fromIndex = recipes.findIndex((recipe) => recipe.id === draggingRecipeId);
+    const toIndex = recipes.findIndex((recipe) => recipe.id === targetRecipeId);
+    if (fromIndex < 0 || toIndex < 0) {
+      setDraggingRecipeId(null);
+      setDragOverRecipeId(null);
+      return;
+    }
+
+    const nextRecipes = [...recipes];
+    const [movedRecipe] = nextRecipes.splice(fromIndex, 1);
+    nextRecipes.splice(toIndex, 0, movedRecipe);
+    onChange(nextRecipes);
+    setDraggingRecipeId(null);
+    setDragOverRecipeId(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggingRecipeId(null);
+    setDragOverRecipeId(null);
   };
 
   const filteredRecipes = recipes.filter(
@@ -214,11 +259,26 @@ export default function RecipeList({ recipes, onChange, onSelectRecipe, selected
           {filteredRecipes.map((recipe) => (
             <div
               key={recipe.id}
+              draggable={!searchQuery.trim()}
+              onDragStart={() => handleDragStart(recipe.id)}
+              onDragOver={(event) => handleDragOver(event, recipe.id)}
+              onDrop={() => handleDrop(recipe.id)}
+              onDragEnd={handleDragEnd}
               onClick={() => onSelectRecipe(recipe)}
-              className={`border rounded-md p-2 cursor-pointer group transition-all flex flex-col justify-between min-h-[60px] sm:min-h-[70px] ${selectedRecipeIds.includes(recipe.id) ? "bg-emerald-900/30 border-emerald-500/60" : "bg-gray-900 border-gray-700 hover:border-emerald-500/50 hover:bg-gray-800"}`}
+              className={`border rounded-md p-2 cursor-pointer group transition-all flex flex-col justify-between min-h-[60px] sm:min-h-[70px] ${selectedRecipeIds.includes(recipe.id) ? "bg-emerald-900/30 border-emerald-500/60" : "bg-gray-900 border-gray-700 hover:border-emerald-500/50 hover:bg-gray-800"} ${draggingRecipeId === recipe.id ? "opacity-40" : ""} ${dragOverRecipeId === recipe.id && draggingRecipeId !== recipe.id ? "ring-2 ring-emerald-500/70 border-emerald-500/70" : ""} ${!searchQuery.trim() ? "active:cursor-grabbing" : ""}`}
+              title={searchQuery.trim() ? recipe.name : `${recipe.name} - ドラッグで並び替え`}
             >
               <div className="flex justify-between items-start mb-1">
-                <h3 className="font-bold text-gray-200 text-xs truncate mr-1" title={recipe.name}>{recipe.name}</h3>
+                <div className="flex items-start gap-1 min-w-0 mr-1">
+                  {!searchQuery.trim() && (
+                    <span className="text-gray-500 mt-0.5 shrink-0" aria-hidden="true">
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 6h.01M8 12h.01M8 18h.01M16 6h.01M16 12h.01M16 18h.01" />
+                      </svg>
+                    </span>
+                  )}
+                  <h3 className="font-bold text-gray-200 text-xs truncate min-w-0" title={recipe.name}>{recipe.name}</h3>
+                </div>
                 <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                   <button onClick={(e) => handleEdit(recipe, e)} className="text-gray-500 hover:text-blue-400 p-0.5" title="編集">
                     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
@@ -242,6 +302,12 @@ export default function RecipeList({ recipes, onChange, onSelectRecipe, selected
             </div>
           ))}
         </div>
+      )}
+
+      {!searchQuery.trim() ? (
+        <p className="text-[11px] text-gray-500 mt-3">各カードをドラッグすると並び順を保存できます。</p>
+      ) : (
+        <p className="text-[11px] text-gray-500 mt-3">検索中は並び替えを無効にしています。</p>
       )}
     </div>
   );

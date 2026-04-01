@@ -90,6 +90,14 @@ function hasMeaningfulData(snapshot: Pick<LocalBackupSnapshot, "meals" | "recipe
   return snapshot.meals.length > 0 || snapshot.recipes.length > 0 || snapshot.recipeSets.length > 0;
 }
 
+function getSnapshotCounts(snapshot: Pick<LocalBackupSnapshot, "meals" | "recipes" | "recipeSets">) {
+  return {
+    meals: snapshot.meals.length,
+    recipes: snapshot.recipes.length,
+    recipeSets: snapshot.recipeSets.length,
+  };
+}
+
 function migrateMeals(meals: Meal[]): Meal[] {
   return meals.map((meal) => ({
     ...meal,
@@ -365,12 +373,29 @@ export default function Home() {
           recipeSets: data?.recipe_sets ?? [],
           goals: data?.goals ?? DEFAULT_GOALS,
         };
-        applySnapshotToState(cloudSnapshot);
-        setCanSyncToCloud(true);
-        setHasLoadedData(true);
-        setIsUsingLocalBackup(false);
-        setSyncStatus("idle");
-        persistLocalBackup(userId, cloudSnapshot);
+        const backupHasData = !!backup && hasMeaningfulData(backup);
+        const cloudHasData = hasMeaningfulData(cloudSnapshot);
+
+        if (!cloudHasData && backupHasData) {
+          applySnapshotToState(backup);
+          setHasLoadedData(true);
+          setCanSyncToCloud(false);
+          setIsUsingLocalBackup(true);
+          setSyncStatus("error");
+          const counts = getSnapshotCounts(backup);
+          setSyncError(
+            `クラウド上のデータが空だったため、この端末のバックアップを表示しています。記録 ${counts.meals} 件 / マイレシピ ${counts.recipes} 件 / 定番セット ${counts.recipeSets} 件。内容を確認して「この端末のバックアップをクラウドへ戻す」を押してください。`
+          );
+        } else {
+          applySnapshotToState(cloudSnapshot);
+          setCanSyncToCloud(true);
+          setHasLoadedData(true);
+          setIsUsingLocalBackup(false);
+          setSyncStatus("idle");
+          if (cloudHasData || !backupHasData) {
+            persistLocalBackup(userId, cloudSnapshot);
+          }
+        }
       }
 
       setIsBooting(false);
