@@ -311,7 +311,18 @@ export default function Home() {
   const [copyAmount, setCopyAmount] = useState("");
   const [isLocalAccess, setIsLocalAccess] = useState(false);
   const [isMobileDevice, setIsMobileDevice] = useState(false);
-  const [mobileOverride, setMobileOverride] = useState<boolean | null>(null);
+  const [mobileOverride, setMobileOverrideState] = useState<boolean | null>(null);
+
+  const setMobileOverride = (value: boolean | null) => {
+    setMobileOverrideState(value);
+    if (typeof window !== "undefined") {
+      if (value === null) {
+        window.localStorage.removeItem("mealapp_mobile_override");
+      } else {
+        window.localStorage.setItem("mealapp_mobile_override", value ? "1" : "0");
+      }
+    }
+  };
   const [pendingMeals, setPendingMeals] = useState<PendingMeal[]>([]);
   const [isMobileDirty, setIsMobileDirty] = useState(false);
   const [mobileSendStatus, setMobileSendStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
@@ -375,6 +386,11 @@ export default function Home() {
     const mobileUA = /iPhone|iPad|iPod|Android/i.test(ua);
     const narrowScreen = window.innerWidth < 768;
     setIsMobileDevice(mobileUA || narrowScreen);
+
+    // localStorage から override を復元
+    const stored = window.localStorage.getItem("mealapp_mobile_override");
+    if (stored === "1") setMobileOverrideState(true);
+    else if (stored === "0") setMobileOverrideState(false);
   }, []);
 
   useEffect(() => {
