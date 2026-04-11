@@ -891,9 +891,9 @@ export default function Home() {
             </button>
             <button
               onClick={() => setMobileOverride(false)}
-              className="text-xs text-gray-500 hover:text-white transition-colors"
+              className="text-xs text-blue-400 hover:text-white transition-colors"
             >
-              💻 PCモード
+              📱 スマホモード
             </button>
             <button
               onClick={handleSignOut}
