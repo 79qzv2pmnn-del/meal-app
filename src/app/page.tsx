@@ -872,6 +872,96 @@ export default function Home() {
     );
   }
 
+  // スマホ専用UI
+  if (isMobile) {
+    return (
+      <div className="min-h-screen bg-gray-900 text-gray-100 font-sans flex flex-col">
+        {/* ヘッダー */}
+        <header className="flex items-center justify-between px-4 py-3 border-b border-gray-800 bg-gray-950">
+          <p className="text-xs font-bold tracking-widest text-emerald-400">MealApp</p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setMobileOverride(false)}
+              className="text-xs text-gray-500 hover:text-white transition-colors"
+            >
+              💻 PCモード
+            </button>
+            <button
+              onClick={handleSignOut}
+              className="text-xs text-gray-500 hover:text-white transition-colors"
+            >
+              ログアウト
+            </button>
+          </div>
+        </header>
+
+        <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
+          {/* 送信ステータス */}
+          {mobileSendStatus === "sending" && (
+            <p className="text-xs text-blue-400 text-center">送信中...</p>
+          )}
+          {mobileSendStatus === "sent" && (
+            <p className="text-xs text-emerald-400 text-center">PCに送信しました</p>
+          )}
+          {mobileSendStatus === "error" && (
+            <p className="text-xs text-red-400 text-center">送信に失敗しました。再度お試しください。</p>
+          )}
+
+          {/* 入力フォーム */}
+          <MealInput
+            date={toDateKey()}
+            onAddMeal={handleAddMeal}
+            recipes={recipes}
+            recipeSets={recipeSets}
+            onChangeRecipes={(r) => { setIsDirty(true); setRecipes(r); }}
+            onChangeRecipeSets={(rs) => { setIsDirty(true); setRecipeSets(rs); }}
+            isMobile={true}
+          />
+
+          {/* 送信済みリスト */}
+          {pendingMeals.length > 0 && (
+            <section>
+              <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">送信済み（承認待ち）</h2>
+              <div className="flex flex-col gap-2">
+                {pendingMeals.map((m) => (
+                  <div key={m.id} className="flex items-center gap-3 bg-gray-800 border border-gray-700 rounded-xl px-3 py-2">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-white truncate">{m.description}</p>
+                      <p className="text-[10px] text-gray-400 font-mono mt-0.5">
+                        {m.calories}kcal
+                        <span className="text-blue-400 ml-1">P{m.protein}</span>
+                        <span className="text-yellow-400 ml-1">F{m.fat}</span>
+                        <span className="text-emerald-400 ml-1">C{m.carbs}</span>
+                        <span className="text-gray-500 ml-2">{new Date(m.submittedAt).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}</span>
+                      </p>
+                    </div>
+                    <button
+                      onClick={async () => {
+                        const newPending = pendingMeals.filter((p) => p.id !== m.id);
+                        setPendingMeals(newPending);
+                        if (supabase && session) {
+                          await supabase.from("mealapp_data").upsert(
+                            { user_id: session.user.id, pending_meals: newPending },
+                            { onConflict: "user_id" }
+                          );
+                        }
+                      }}
+                      className="text-gray-500 hover:text-red-400 transition-colors p-1 shrink-0"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   const headerLabel = new Date(`${selectedDate}T00:00:00`).toLocaleDateString("ja-JP", {
     year: "numeric",
     month: "long",
