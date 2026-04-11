@@ -1049,6 +1049,13 @@ export default function Home() {
               </svg>
             </button>
             <button
+              onClick={() => setMobileOverride(isMobile ? false : true)}
+              className={`text-xs px-3 py-2 rounded-lg border transition font-medium ${isMobile ? "bg-blue-500/20 border-blue-400/50 text-blue-300" : "bg-gray-950 border-gray-700 text-gray-400"}`}
+              title="スマホ/PCモード切り替え"
+            >
+              {isMobile ? "📱 スマホ" : "💻 PC"}
+            </button>
+            <button
               onClick={handleSignOut}
               className="text-xs bg-gray-950 hover:bg-gray-800 text-gray-300 px-4 py-2 rounded-lg border border-gray-700 transition font-medium"
             >
