@@ -622,11 +622,10 @@ export default function Home() {
 
   const handleAddMeal = (meal: Meal) => {
     if (isMobile) {
-      // スマホ：送信キューに積むだけ、本データは変更しない
+      // スマホ：即クラウドへ送信
       const pendingMeal: PendingMeal = { ...meal, submittedAt: new Date().toISOString() };
       setPendingMeals((prev) => [...prev, pendingMeal]);
-      setIsMobileDirty(true);
-      setMobileSendStatus("idle");
+      void handleSubmitFromMobile([pendingMeal]);
     } else {
       setIsDirty(true);
       setMeals((prev) => [meal, ...prev].sort((a, b) => b.timestamp - a.timestamp));
@@ -717,9 +716,9 @@ export default function Home() {
     setCopyAmount("");
   };
 
-  // スマホ：キューに溜めた pending_meals をクラウドへ送信
-  const handleSubmitFromMobile = async () => {
-    if (!supabase || !session || pendingMeals.length === 0) return;
+  // スマホ：pending_meals をクラウドへ送信（追加時に即呼び出す）
+  const handleSubmitFromMobile = async (toSend: PendingMeal[]) => {
+    if (!supabase || !session || toSend.length === 0) return;
     setMobileSendStatus("sending");
 
     // 既存 pending_meals とマージ（他端末の送信を上書きしないよう先に取得）
@@ -729,7 +728,7 @@ export default function Home() {
       .eq("user_id", session.user.id)
       .maybeSingle<{ pending_meals: PendingMeal[] | null }>();
 
-    const merged = [...(latest?.pending_meals ?? []), ...pendingMeals];
+    const merged = [...(latest?.pending_meals ?? []), ...toSend];
 
     const { error } = await supabase
       .from("mealapp_data")
@@ -740,7 +739,6 @@ export default function Home() {
       return;
     }
 
-    setPendingMeals([]);
     setIsMobileDirty(false);
     setMobileSendStatus("sent");
   };
@@ -1182,7 +1180,7 @@ export default function Home() {
                 <p className="text-xs text-blue-300/70 mt-0.5">PCで開いたときに承認して記録に追加されます</p>
               </div>
               <button
-                onClick={handleSubmitFromMobile}
+                onClick={() => handleSubmitFromMobile(pendingMeals)}
                 disabled={mobileSendStatus === "sending"}
                 className="text-xs bg-blue-500 hover:bg-blue-400 disabled:opacity-50 text-white font-semibold px-3 py-1.5 rounded-lg transition-colors"
               >
