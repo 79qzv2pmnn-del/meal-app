@@ -12,6 +12,7 @@ interface Props {
   recipeSets: RecipeSet[];
   onChangeRecipes: (recipes: Recipe[]) => void;
   onChangeRecipeSets: (sets: RecipeSet[]) => void;
+  isMobile?: boolean;
 }
 
 interface SelectedRecipeEntry {
@@ -39,6 +40,7 @@ export default function MealInput({
   recipeSets,
   onChangeRecipes,
   onChangeRecipeSets,
+  isMobile = false,
 }: Props) {
   const [inputText, setInputText] = useState("");
   const [manualCal, setManualCal] = useState("");
@@ -311,7 +313,9 @@ export default function MealInput({
             disabled={selectedEntries.length === 0 && !manualCal && !inputText.trim()}
             className="bg-emerald-600 hover:bg-emerald-500 disabled:bg-gray-700 disabled:text-gray-500 text-white font-bold py-3 rounded-lg transition-colors shadow-lg shadow-emerald-900/20"
           >
-            {selectedEntries.length > 0 ? `${selectedEntries.length}件まとめて記録する` : "記録する"}
+            {selectedEntries.length > 0
+              ? `${selectedEntries.length}件まとめて${isMobile ? "送信キューに追加" : "記録する"}`
+              : isMobile ? "送信キューに追加" : "記録する"}
           </button>
         </form>
       </div>

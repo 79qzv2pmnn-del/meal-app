@@ -1,8 +1,8 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
-import { Meal, PFCGoals, Recipe, RecipeSet } from "../types";
+import { Meal, PendingMeal, PFCGoals, Recipe, RecipeSet } from "../types";
 import MealInput from "../components/MealInput";
 import MealList from "../components/MealList";
 import DateNavigator, { toDateKey } from "../components/DateNavigator";
@@ -17,6 +17,7 @@ const DEFAULT_GOALS: PFCGoals = {
   fat: 80,
   carbs: 400,
 };
+const PUBLIC_APP_URL = "https://79qzv2pmnn-del.github.io/meal-app/";
 
 const CONDITION_PRESETS = [
   { value: "風邪", label: "風邪" },
@@ -31,6 +32,8 @@ interface MealAppRow {
   recipes: Recipe[] | null;
   recipe_sets: RecipeSet[] | null;
   goals: PFCGoals | null;
+  updated_at: string | null;
+  pending_meals: PendingMeal[] | null;
 }
 
 interface LocalBackupSnapshot {
@@ -96,6 +99,48 @@ function getSnapshotCounts(snapshot: Pick<LocalBackupSnapshot, "meals" | "recipe
     recipes: snapshot.recipes.length,
     recipeSets: snapshot.recipeSets.length,
   };
+}
+
+function getLatestMealTimestamp(snapshot: Pick<LocalBackupSnapshot, "meals"> | null) {
+  if (!snapshot || snapshot.meals.length === 0) return 0;
+  return snapshot.meals.reduce((latest, meal) => Math.max(latest, meal.timestamp ?? 0), 0);
+}
+
+function isSuspiciousMealShrink(
+  previous: Pick<LocalBackupSnapshot, "meals"> | null,
+  next: Pick<LocalBackupSnapshot, "meals">
+) {
+  const previousCount = previous?.meals.length ?? 0;
+  const nextCount = next.meals.length;
+
+  if (previousCount === 0 || nextCount >= previousCount) {
+    return false;
+  }
+
+  if (nextCount === 0) {
+    return true;
+  }
+
+  return previousCount >= 10 && nextCount <= previousCount * 0.5;
+}
+
+function isBackupAhead(
+  backup: Pick<LocalBackupSnapshot, "meals" | "recipes" | "recipeSets"> | null,
+  cloud: Pick<LocalBackupSnapshot, "meals" | "recipes" | "recipeSets">
+) {
+  if (!backup || !hasMeaningfulData(backup)) return false;
+
+  const backupCounts = getSnapshotCounts(backup);
+  const cloudCounts = getSnapshotCounts(cloud);
+  if (
+    backupCounts.meals > cloudCounts.meals ||
+    backupCounts.recipes > cloudCounts.recipes ||
+    backupCounts.recipeSets > cloudCounts.recipeSets
+  ) {
+    return true;
+  }
+
+  return getLatestMealTimestamp(backup) > getLatestMealTimestamp(cloud);
 }
 
 function migrateMeals(meals: Meal[]): Meal[] {
@@ -229,6 +274,7 @@ function LoginCard({
 
 export default function Home() {
   const [session, setSession] = useState<Session | null>(null);
+  const sessionRef = useRef<Session | null>(null);
   const [isBooting, setIsBooting] = useState(isSupabaseConfigured);
   const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
@@ -248,9 +294,13 @@ export default function Home() {
   const [syncError, setSyncError] = useState("");
   const [hasLoadedData, setHasLoadedData] = useState(false);
   const [canSyncToCloud, setCanSyncToCloud] = useState(false);
+  const [isDirty, setIsDirty] = useState(false);
+  const lastCloudUpdatedAt = useRef<string | null>(null);
   const [localBackup, setLocalBackup] = useState<LocalBackupSnapshot | null>(null);
   const [isUsingLocalBackup, setIsUsingLocalBackup] = useState(false);
   const [isRestoringBackup, setIsRestoringBackup] = useState(false);
+  const [shouldOfferBackupRestore, setShouldOfferBackupRestore] = useState(false);
+  const [backupRestoreHint, setBackupRestoreHint] = useState("");
   const [conditionStartDate, setConditionStartDate] = useState<string>(toDateKey());
   const [conditionEndDate, setConditionEndDate] = useState<string>(toDateKey());
   const [conditionType, setConditionType] = useState<(typeof CONDITION_PRESETS)[number]["value"]>("風邪");
@@ -259,6 +309,14 @@ export default function Home() {
   const [copySource, setCopySource] = useState<Meal | null>(null);
   const [copyBaseAmount, setCopyBaseAmount] = useState("");
   const [copyAmount, setCopyAmount] = useState("");
+  const [isLocalAccess, setIsLocalAccess] = useState(false);
+  const [isMobileDevice, setIsMobileDevice] = useState(false);
+  const [mobileOverride, setMobileOverride] = useState<boolean | null>(null);
+  const [pendingMeals, setPendingMeals] = useState<PendingMeal[]>([]);
+  const [isMobileDirty, setIsMobileDirty] = useState(false);
+  const [mobileSendStatus, setMobileSendStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
+
+  const isMobile = mobileOverride !== null ? mobileOverride : isMobileDevice;
 
   const resetLocalData = () => {
     setMeals([]);
@@ -270,8 +328,11 @@ export default function Home() {
     setLocalBackup(null);
     setIsUsingLocalBackup(false);
     setIsRestoringBackup(false);
+    setShouldOfferBackupRestore(false);
+    setBackupRestoreHint("");
     setSyncStatus("idle");
     setSyncError("");
+    setIsDirty(false);
   };
 
   const applySnapshotToState = (snapshot: Pick<LocalBackupSnapshot, "meals" | "recipes" | "recipeSets" | "goals">) => {
@@ -279,6 +340,7 @@ export default function Home() {
     setRecipes(snapshot.recipes);
     setRecipeSets(snapshot.recipeSets);
     setGoals(snapshot.goals);
+    setIsDirty(false);
   };
 
   const persistLocalBackup = (userId: string, snapshot: Pick<LocalBackupSnapshot, "meals" | "recipes" | "recipeSets" | "goals">) => {
@@ -296,6 +358,26 @@ export default function Home() {
   };
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    const host = window.location.hostname;
+    setIsLocalAccess(
+      host === "localhost" ||
+      host === "127.0.0.1" ||
+      host.startsWith("192.168.") ||
+      host.startsWith("10.") ||
+      host.startsWith("172.")
+    );
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const ua = navigator.userAgent;
+    const mobileUA = /iPhone|iPad|iPod|Android/i.test(ua);
+    const narrowScreen = window.innerWidth < 768;
+    setIsMobileDevice(mobileUA || narrowScreen);
+  }, []);
+
+  useEffect(() => {
     if (!supabase) {
       return;
     }
@@ -304,6 +386,7 @@ export default function Home() {
 
     supabase.auth.getSession().then(({ data }) => {
       if (!mounted) return;
+      sessionRef.current = data.session ?? null;
       setSession(data.session ?? null);
       if (!data.session) {
         resetLocalData();
@@ -314,6 +397,7 @@ export default function Home() {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      sessionRef.current = nextSession ?? null;
       setSession(nextSession ?? null);
       if (!nextSession) {
         resetLocalData();
@@ -343,6 +427,8 @@ export default function Home() {
       setIsBooting(true);
       setCanSyncToCloud(false);
       setIsUsingLocalBackup(false);
+      setShouldOfferBackupRestore(false);
+      setBackupRestoreHint("");
       setSyncError("");
 
       const backup = readLocalBackup(userId);
@@ -350,7 +436,7 @@ export default function Home() {
 
       const { data, error } = await client
         .from("mealapp_data")
-        .select("meals, recipes, recipe_sets, goals")
+        .select("meals, recipes, recipe_sets, goals, updated_at, pending_meals")
         .eq("user_id", userId)
         .maybeSingle<MealAppRow>();
 
@@ -367,6 +453,8 @@ export default function Home() {
           setSyncError("クラウド上のデータを読めませんでした。空データは保存していません。再読み込みしてください。");
         }
       } else {
+        lastCloudUpdatedAt.current = data?.updated_at ?? null;
+        setPendingMeals(data?.pending_meals ?? []);
         const cloudSnapshot = {
           meals: migrateMeals(data?.meals ?? []),
           recipes: data?.recipes ?? [],
@@ -375,6 +463,8 @@ export default function Home() {
         };
         const backupHasData = !!backup && hasMeaningfulData(backup);
         const cloudHasData = hasMeaningfulData(cloudSnapshot);
+        const cloudLooksSuspicious = backupHasData && isSuspiciousMealShrink(backup, cloudSnapshot);
+        const backupAhead = isBackupAhead(backup, cloudSnapshot);
 
         if (!cloudHasData && backupHasData) {
           applySnapshotToState(backup);
@@ -386,12 +476,33 @@ export default function Home() {
           setSyncError(
             `クラウド上のデータが空だったため、この端末のバックアップを表示しています。記録 ${counts.meals} 件 / マイレシピ ${counts.recipes} 件 / 定番セット ${counts.recipeSets} 件。内容を確認して「この端末のバックアップをクラウドへ戻す」を押してください。`
           );
+          setShouldOfferBackupRestore(true);
+        } else if (cloudLooksSuspicious && backup) {
+          applySnapshotToState(backup);
+          setHasLoadedData(true);
+          setCanSyncToCloud(false);
+          setIsUsingLocalBackup(true);
+          setSyncStatus("error");
+          const backupCounts = getSnapshotCounts(backup);
+          const cloudCounts = getSnapshotCounts(cloudSnapshot);
+          setSyncError(
+            `クラウド上の記録件数が急に減っていたため、この端末のバックアップを表示しています。クラウド ${cloudCounts.meals} 件 / 端末 ${backupCounts.meals} 件。内容を確認して「この端末のバックアップをクラウドへ戻す」を押してください。`
+          );
+          setShouldOfferBackupRestore(true);
         } else {
           applySnapshotToState(cloudSnapshot);
           setCanSyncToCloud(true);
           setHasLoadedData(true);
           setIsUsingLocalBackup(false);
           setSyncStatus("idle");
+          setShouldOfferBackupRestore(backupAhead);
+          if (backupAhead && backup) {
+            const backupCounts = getSnapshotCounts(backup);
+            const cloudCounts = getSnapshotCounts(cloudSnapshot);
+            setBackupRestoreHint(
+              `この端末のバックアップの方が新しい可能性があります。クラウド ${cloudCounts.meals} 件 / 端末 ${backupCounts.meals} 件。PCで追加した記録が消えたときは、内容を確認して「この端末のバックアップをクラウドへ戻す」を押してください。`
+            );
+          }
           if (cloudHasData || !backupHasData) {
             persistLocalBackup(userId, cloudSnapshot);
           }
@@ -409,12 +520,36 @@ export default function Home() {
   }, [session, hasLoadedData]);
 
   useEffect(() => {
-    if (!supabase || !session || !hasLoadedData || !canSyncToCloud) return;
+    // スマホは meals を直接保存しない（pending_meals 経由で送信する）
+    if (!supabase || !hasLoadedData || !canSyncToCloud || !isDirty || isMobile) return;
 
     const client = supabase;
-    const userId = session.user.id;
     const timer = window.setTimeout(async () => {
+      const userId = sessionRef.current?.user.id;
+      if (!userId) return;
+
+      // 保存前にクラウドの updated_at を確認し、自分が読んだ後に別の端末が
+      // 保存していたらスキップ（古いデータで上書きしない）
+      const { data: latest } = await client
+        .from("mealapp_data")
+        .select("updated_at")
+        .eq("user_id", userId)
+        .maybeSingle<{ updated_at: string | null }>();
+
+      if (latest?.updated_at && lastCloudUpdatedAt.current) {
+        const cloudTime = new Date(latest.updated_at).getTime();
+        const readTime = new Date(lastCloudUpdatedAt.current).getTime();
+        if (cloudTime > readTime) {
+          // 別の端末がより新しいデータを保存済み → 上書きせず再ロードを促す
+          setSyncStatus("error");
+          setSyncError("別の端末で保存されたデータがあります。ページを再読み込みして最新データを取得してください。");
+          setIsDirty(false);
+          return;
+        }
+      }
+
       setSyncStatus("saving");
+      const savedAt = new Date().toISOString();
       const { error } = await client.from("mealapp_data").upsert(
         {
           user_id: userId,
@@ -422,7 +557,7 @@ export default function Home() {
           recipes,
           recipe_sets: recipeSets,
           goals,
-          updated_at: new Date().toISOString(),
+          updated_at: savedAt,
         },
         { onConflict: "user_id" }
       );
@@ -433,6 +568,7 @@ export default function Home() {
         return;
       }
 
+      lastCloudUpdatedAt.current = savedAt;
       setSyncStatus("saved");
       setSyncError("");
       persistLocalBackup(userId, { meals, recipes, recipeSets, goals });
@@ -440,7 +576,7 @@ export default function Home() {
     }, 800);
 
     return () => window.clearTimeout(timer);
-  }, [canSyncToCloud, goals, hasLoadedData, meals, recipeSets, recipes, session]);
+  }, [canSyncToCloud, goals, hasLoadedData, isDirty, isMobile, meals, recipeSets, recipes]);
 
   const selectedMeals = useMemo(
     () => meals.filter((meal) => meal.date === selectedDate && !isConditionEvent(meal)),
@@ -485,7 +621,16 @@ export default function Home() {
   };
 
   const handleAddMeal = (meal: Meal) => {
-    setMeals((prev) => [meal, ...prev].sort((a, b) => b.timestamp - a.timestamp));
+    if (isMobile) {
+      // スマホ：送信キューに積むだけ、本データは変更しない
+      const pendingMeal: PendingMeal = { ...meal, submittedAt: new Date().toISOString() };
+      setPendingMeals((prev) => [...prev, pendingMeal]);
+      setIsMobileDirty(true);
+      setMobileSendStatus("idle");
+    } else {
+      setIsDirty(true);
+      setMeals((prev) => [meal, ...prev].sort((a, b) => b.timestamp - a.timestamp));
+    }
   };
 
   const handleAddConditionEvent = () => {
@@ -507,6 +652,7 @@ export default function Home() {
       category: "condition",
       loggingStatus: "記録停止",
     };
+    setIsDirty(true);
     setMeals((prev) =>
       [event, ...prev].sort((a, b) => b.timestamp - a.timestamp)
     );
@@ -518,11 +664,13 @@ export default function Home() {
 
   const handleDeleteMeal = (id: string) => {
     if (window.confirm("この記録を削除しますか？")) {
+      setIsDirty(true);
       setMeals((prev) => prev.filter((meal) => meal.id !== id));
     }
   };
 
   const handleUpdateMeal = (updatedMeal: Meal) => {
+    setIsDirty(true);
     setMeals((prev) =>
       prev
         .map((meal) => (meal.id === updatedMeal.id ? updatedMeal : meal))
@@ -562,10 +710,76 @@ export default function Home() {
       carbs,
       actualAmount: newAmt > 0 ? newAmt : (base > 0 ? base : copySource.actualAmount),
     };
+    setIsDirty(true);
     setMeals((prev) => [copied, ...prev].sort((a, b) => b.timestamp - a.timestamp));
     setCopySource(null);
     setCopyBaseAmount("");
     setCopyAmount("");
+  };
+
+  // スマホ：キューに溜めた pending_meals をクラウドへ送信
+  const handleSubmitFromMobile = async () => {
+    if (!supabase || !session || pendingMeals.length === 0) return;
+    setMobileSendStatus("sending");
+
+    // 既存 pending_meals とマージ（他端末の送信を上書きしないよう先に取得）
+    const { data: latest } = await supabase
+      .from("mealapp_data")
+      .select("pending_meals")
+      .eq("user_id", session.user.id)
+      .maybeSingle<{ pending_meals: PendingMeal[] | null }>();
+
+    const merged = [...(latest?.pending_meals ?? []), ...pendingMeals];
+
+    const { error } = await supabase
+      .from("mealapp_data")
+      .upsert({ user_id: session.user.id, pending_meals: merged }, { onConflict: "user_id" });
+
+    if (error) {
+      setMobileSendStatus("error");
+      return;
+    }
+
+    setPendingMeals([]);
+    setIsMobileDirty(false);
+    setMobileSendStatus("sent");
+  };
+
+  // PC：pending meal を1件承認して本データへ取り込む
+  const handleApprovePending = async (pendingMeal: PendingMeal) => {
+    if (!supabase || !session) return;
+    const { submittedAt: _s, ...meal } = pendingMeal;
+    const newMeals = [meal, ...meals].sort((a, b) => b.timestamp - a.timestamp);
+    const newPending = pendingMeals.filter((m) => m.id !== pendingMeal.id);
+    setMeals(newMeals);
+    setPendingMeals(newPending);
+    setIsDirty(true);
+    await supabase
+      .from("mealapp_data")
+      .upsert({ user_id: session.user.id, pending_meals: newPending }, { onConflict: "user_id" });
+  };
+
+  // PC：pending meal を1件却下
+  const handleRejectPending = async (id: string) => {
+    if (!supabase || !session) return;
+    const newPending = pendingMeals.filter((m) => m.id !== id);
+    setPendingMeals(newPending);
+    await supabase
+      .from("mealapp_data")
+      .upsert({ user_id: session.user.id, pending_meals: newPending }, { onConflict: "user_id" });
+  };
+
+  // PC：pending meals をすべて承認
+  const handleApproveAllPending = async () => {
+    if (!supabase || !session) return;
+    const toAdd = pendingMeals.map(({ submittedAt: _s, ...meal }) => meal);
+    const newMeals = [...toAdd, ...meals].sort((a, b) => b.timestamp - a.timestamp);
+    setMeals(newMeals);
+    setPendingMeals([]);
+    setIsDirty(true);
+    await supabase
+      .from("mealapp_data")
+      .upsert({ user_id: session.user.id, pending_meals: [] }, { onConflict: "user_id" });
   };
 
   const handleSignOut = async () => {
@@ -611,6 +825,8 @@ export default function Home() {
     setHasLoadedData(true);
     setCanSyncToCloud(true);
     setIsUsingLocalBackup(false);
+    setShouldOfferBackupRestore(false);
+    setBackupRestoreHint("");
     setSyncStatus("saved");
     setSyncError("この端末のバックアップをクラウドへ戻しました。");
     setIsRestoringBackup(false);
@@ -671,7 +887,7 @@ export default function Home() {
       {showGoalSettings && (
         <GoalSettings
           goals={goals}
-          onSave={setGoals}
+          onSave={(g) => { setIsDirty(true); setGoals(g); }}
           onClose={() => setShowGoalSettings(false)}
         />
       )}
@@ -772,6 +988,24 @@ export default function Home() {
       })()}
 
       <main className="max-w-2xl mx-auto flex flex-col gap-5">
+        {isLocalAccess && (
+          <section className="bg-sky-500/10 border border-sky-400/30 rounded-2xl p-4">
+            <h2 className="text-sm font-semibold text-sky-200">普段は公開版を使うのがおすすめです</h2>
+            <p className="text-xs text-sky-100/80 mt-2 leading-5">
+              PC とスマホのズレを減らすため、普段の入力は PC もスマホも同じ公開URLで使ってください。
+            </p>
+            <a
+              href={PUBLIC_APP_URL}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex mt-3 bg-sky-300 hover:bg-sky-200 text-sky-950 text-sm font-semibold px-4 py-2 rounded-xl transition-colors"
+            >
+              公開版を開く
+            </a>
+            <p className="text-[11px] text-sky-100/70 mt-2 break-all">{PUBLIC_APP_URL}</p>
+          </section>
+        )}
+
         <header className="flex items-start justify-between border-b border-gray-800 pb-4 gap-3">
           <div>
             <h1 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
@@ -823,7 +1057,7 @@ export default function Home() {
           </div>
         </header>
 
-        {localBackup && hasMeaningfulData(localBackup) && (isUsingLocalBackup || !canSyncToCloud) && (
+        {localBackup && hasMeaningfulData(localBackup) && (isUsingLocalBackup || !canSyncToCloud || shouldOfferBackupRestore) && (
           <section className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4">
             <h2 className="text-sm font-semibold text-amber-200">この端末に残っているバックアップがあります</h2>
             <p className="text-xs text-amber-100/80 mt-2 leading-5">
@@ -832,6 +1066,9 @@ export default function Home() {
             <p className="text-xs text-amber-100/80 mt-1 leading-5">
               記録 {localBackup.meals.length} 件 / マイレシピ {localBackup.recipes.length} 件 / 定番セット {localBackup.recipeSets.length} 件
             </p>
+            {backupRestoreHint && (
+              <p className="text-xs text-amber-100/80 mt-2 leading-5">{backupRestoreHint}</p>
+            )}
             <button
               type="button"
               onClick={handleRestoreLocalBackup}
@@ -840,6 +1077,52 @@ export default function Home() {
             >
               {isRestoringBackup ? "復元中..." : "この端末のバックアップをクラウドへ戻す"}
             </button>
+          </section>
+        )}
+
+        {/* PC：スマホからの承認待ちバナー */}
+        {!isMobile && pendingMeals.length > 0 && (
+          <section className="bg-violet-500/10 border border-violet-400/30 rounded-2xl p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <h2 className="text-sm font-semibold text-violet-200">スマホからの承認待ち ({pendingMeals.length}件)</h2>
+                <p className="text-xs text-violet-300/70 mt-0.5">承認するとこの日の記録に追加されます</p>
+              </div>
+              <button
+                onClick={handleApproveAllPending}
+                className="text-xs bg-violet-500 hover:bg-violet-400 text-white font-semibold px-3 py-1.5 rounded-lg transition-colors"
+              >
+                すべて承認
+              </button>
+            </div>
+            <div className="flex flex-col gap-2">
+              {pendingMeals.map((m) => (
+                <div key={m.id} className="flex items-center gap-3 bg-gray-900/60 rounded-xl px-3 py-2">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-white truncate">{m.description}</p>
+                    <p className="text-[10px] text-gray-400 font-mono mt-0.5">
+                      {m.calories}kcal
+                      <span className="text-blue-400 ml-1">P{m.protein}</span>
+                      <span className="text-yellow-400 ml-1">F{m.fat}</span>
+                      <span className="text-emerald-400 ml-1">C{m.carbs}</span>
+                      <span className="text-gray-500 ml-2">{m.date} · {new Date(m.submittedAt).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}送信</span>
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => handleApprovePending(m)}
+                    className="text-xs bg-emerald-600 hover:bg-emerald-500 text-white font-semibold px-2.5 py-1 rounded-lg transition-colors shrink-0"
+                  >
+                    承認
+                  </button>
+                  <button
+                    onClick={() => handleRejectPending(m.id)}
+                    className="text-xs text-gray-400 hover:text-red-400 transition-colors px-1 shrink-0"
+                  >
+                    却下
+                  </button>
+                </div>
+              ))}
+            </div>
           </section>
         )}
 
@@ -877,10 +1160,59 @@ export default function Home() {
             onAddMeal={handleAddMeal}
             recipes={recipes}
             recipeSets={recipeSets}
-            onChangeRecipes={setRecipes}
-            onChangeRecipeSets={setRecipeSets}
+            onChangeRecipes={(r) => { setIsDirty(true); setRecipes(r); }}
+            onChangeRecipeSets={(rs) => { setIsDirty(true); setRecipeSets(rs); }}
+            isMobile={isMobile}
           />
         </section>
+
+        {/* スマホ：送信キュー */}
+        {isMobile && pendingMeals.length > 0 && (
+          <section className="bg-blue-500/10 border border-blue-400/30 rounded-2xl p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <h2 className="text-sm font-semibold text-blue-200">送信待ち ({pendingMeals.length}件)</h2>
+                <p className="text-xs text-blue-300/70 mt-0.5">PCで開いたときに承認して記録に追加されます</p>
+              </div>
+              <button
+                onClick={handleSubmitFromMobile}
+                disabled={mobileSendStatus === "sending"}
+                className="text-xs bg-blue-500 hover:bg-blue-400 disabled:opacity-50 text-white font-semibold px-3 py-1.5 rounded-lg transition-colors"
+              >
+                {mobileSendStatus === "sending" ? "送信中..." : "PCに送信"}
+              </button>
+            </div>
+            {mobileSendStatus === "sent" && (
+              <p className="text-xs text-blue-300 mb-2">送信しました。PCを開いて承認してください。</p>
+            )}
+            {mobileSendStatus === "error" && (
+              <p className="text-xs text-red-400 mb-2">送信に失敗しました。もう一度お試しください。</p>
+            )}
+            <div className="flex flex-col gap-2">
+              {pendingMeals.map((m) => (
+                <div key={m.id} className="flex items-center gap-3 bg-gray-900/60 rounded-xl px-3 py-2">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-white truncate">{m.description}</p>
+                    <p className="text-[10px] text-gray-400 font-mono mt-0.5">
+                      {m.calories}kcal
+                      <span className="text-blue-400 ml-1">P{m.protein}</span>
+                      <span className="text-yellow-400 ml-1">F{m.fat}</span>
+                      <span className="text-emerald-400 ml-1">C{m.carbs}</span>
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setPendingMeals((prev) => prev.filter((p) => p.id !== m.id))}
+                    className="text-gray-500 hover:text-red-400 transition-colors p-1 shrink-0"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
         <section className="bg-gray-800 rounded-xl border border-gray-700 shadow-xl overflow-hidden">
           <button

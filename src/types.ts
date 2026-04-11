@@ -47,3 +47,7 @@ export interface PFCGoals {
     fat: number;
     carbs: number;
 }
+
+export interface PendingMeal extends Meal {
+    submittedAt: string; // ISO8601: スマホから送信した時刻
+}
