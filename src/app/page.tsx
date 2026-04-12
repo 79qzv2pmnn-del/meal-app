@@ -693,6 +693,24 @@ export default function Home() {
     );
   };
 
+  const handleSaveToRecipe = (meal: Meal) => {
+    const name = meal.description.split("\n")[0].trim().slice(0, 50) || "無題のレシピ";
+    const newRecipe: Recipe = {
+      id: crypto.randomUUID(),
+      name,
+      description: "",
+      calories: meal.calories,
+      protein: meal.protein,
+      fat: meal.fat,
+      carbs: meal.carbs,
+      baseAmount: meal.actualAmount ?? 1,
+      unit: meal.actualAmount ? "g" : "人前",
+    };
+    setIsDirty(true);
+    setRecipes((prev) => [newRecipe, ...prev]);
+    alert(`「${name}」をマイレシピに保存しました。`);
+  };
+
   const handleCopyMeal = (meal: Meal) => {
     setCopySource(meal);
     setCopyBaseAmount(meal.actualAmount?.toString() ?? "");
@@ -1463,7 +1481,7 @@ export default function Home() {
             </h2>
             <span className="text-xs text-gray-500">{selectedMeals.length}件</span>
           </div>
-          <MealList meals={selectedMeals} onDelete={handleDeleteMeal} onUpdate={handleUpdateMeal} onCopy={handleCopyMeal} />
+          <MealList meals={selectedMeals} onDelete={handleDeleteMeal} onUpdate={handleUpdateMeal} onCopy={handleCopyMeal} onSaveToRecipe={handleSaveToRecipe} />
         </section>
       </main>
     </div>

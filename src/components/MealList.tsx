@@ -8,9 +8,10 @@ interface Props {
   onDelete: (id: string) => void;
   onUpdate: (meal: Meal) => void;
   onCopy: (meal: Meal) => void;
+  onSaveToRecipe?: (meal: Meal) => void;
 }
 
-export default function MealList({ meals, onDelete, onUpdate, onCopy }: Props) {
+export default function MealList({ meals, onDelete, onUpdate, onCopy, onSaveToRecipe }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<{
     description: string;
@@ -180,6 +181,11 @@ export default function MealList({ meals, onDelete, onUpdate, onCopy }: Props) {
                   <button onClick={() => onCopy(meal)} className="text-gray-600 hover:text-emerald-400 transition-colors p-1" aria-label="コピー">
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
                   </button>
+                  {onSaveToRecipe && (
+                    <button onClick={() => onSaveToRecipe(meal)} className="text-gray-600 hover:text-yellow-400 transition-colors p-1" aria-label="マイレシピに保存">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" /></svg>
+                    </button>
+                  )}
                   <button onClick={() => onDelete(meal.id)} className="text-gray-600 hover:text-red-400 transition-colors p-1" aria-label="削除">
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
