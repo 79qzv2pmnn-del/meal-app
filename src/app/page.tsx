@@ -324,8 +324,9 @@ export default function Home() {
     }
   };
   const [pendingMeals, setPendingMeals] = useState<PendingMeal[]>([]);
-  const [isMobileDirty, setIsMobileDirty] = useState(false);
   const [mobileSendStatus, setMobileSendStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
+  // スマホからの送信を直列化するPromiseチェーン（race condition防止）
+  const mobileSubmitChainRef = useRef<Promise<void>>(Promise.resolve());
 
   const isMobile = mobileOverride !== null ? mobileOverride : isMobileDevice;
 
@@ -638,10 +639,12 @@ export default function Home() {
 
   const handleAddMeal = (meal: Meal) => {
     if (isMobile) {
-      // スマホ：即クラウドへ送信
+      // スマホ：送信を直列化して race condition を防ぐ
       const pendingMeal: PendingMeal = { ...meal, submittedAt: new Date().toISOString() };
       setPendingMeals((prev) => [...prev, pendingMeal]);
-      void handleSubmitFromMobile([pendingMeal]);
+      mobileSubmitChainRef.current = mobileSubmitChainRef.current.then(() =>
+        handleSubmitFromMobile(pendingMeal)
+      );
     } else {
       setIsDirty(true);
       setMeals((prev) => [meal, ...prev].sort((a, b) => b.timestamp - a.timestamp));
@@ -750,31 +753,39 @@ export default function Home() {
     setCopyAmount("");
   };
 
-  // スマホ：pending_meals をクラウドへ送信（追加時に即呼び出す）
-  const handleSubmitFromMobile = async (toSend: PendingMeal[]) => {
-    if (!supabase || !session || toSend.length === 0) return;
+  // スマホ：pending_meal を1件ずつ直列でクラウドへ送信（race condition防止のため select→append→upsert）
+  const handleSubmitFromMobile = async (toSend: PendingMeal) => {
+    const currentSession = sessionRef.current;
+    if (!supabase || !currentSession) return;
     setMobileSendStatus("sending");
 
-    // 既存 pending_meals とマージ（他端末の送信を上書きしないよう先に取得）
     const { data: latest } = await supabase
       .from("mealapp_data")
       .select("pending_meals")
-      .eq("user_id", session.user.id)
+      .eq("user_id", currentSession.user.id)
       .maybeSingle<{ pending_meals: PendingMeal[] | null }>();
 
-    const merged = [...(latest?.pending_meals ?? []), ...toSend];
+    const merged = [...(latest?.pending_meals ?? []), toSend];
 
     const { error } = await supabase
       .from("mealapp_data")
-      .upsert({ user_id: session.user.id, pending_meals: merged }, { onConflict: "user_id" });
+      .upsert({ user_id: currentSession.user.id, pending_meals: merged }, { onConflict: "user_id" });
 
     if (error) {
       setMobileSendStatus("error");
       return;
     }
 
-    setIsMobileDirty(false);
     setMobileSendStatus("sent");
+  };
+
+  // スマホ「PCに送信」ボタン用：全 pendingMeals を1件ずつ直列で再送
+  const handleResubmitAllFromMobile = () => {
+    for (const meal of pendingMeals) {
+      mobileSubmitChainRef.current = mobileSubmitChainRef.current.then(() =>
+        handleSubmitFromMobile(meal)
+      );
+    }
   };
 
   // PC：pending meal を1件承認して本データへ取り込む
@@ -1322,7 +1333,7 @@ export default function Home() {
                 <p className="text-xs text-blue-300/70 mt-0.5">PCで開いたときに承認して記録に追加されます</p>
               </div>
               <button
-                onClick={() => handleSubmitFromMobile(pendingMeals)}
+                onClick={handleResubmitAllFromMobile}
                 disabled={mobileSendStatus === "sending"}
                 className="text-xs bg-blue-500 hover:bg-blue-400 disabled:opacity-50 text-white font-semibold px-3 py-1.5 rounded-lg transition-colors"
               >
