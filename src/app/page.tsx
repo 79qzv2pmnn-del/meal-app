@@ -18,6 +18,8 @@ const DEFAULT_GOALS: PFCGoals = {
   carbs: 400,
 };
 const PUBLIC_APP_URL = "https://79qzv2pmnn-del.github.io/meal-app/";
+const BACKUP_KEY_PREFIX = "mealapp_backup:";
+const LOCAL_RECOVERY_USER_ID = "local-recovery";
 
 const CONDITION_PRESETS = [
   { value: "風邪", label: "風邪" },
@@ -47,20 +49,18 @@ interface LocalBackupSnapshot {
 }
 
 function getBackupKey(userId: string) {
-  return `mealapp_backup:${userId}`;
+  return `${BACKUP_KEY_PREFIX}${userId}`;
 }
 
-function readLocalBackup(userId: string): LocalBackupSnapshot | null {
-  if (typeof window === "undefined") return null;
-
-  const raw = window.localStorage.getItem(getBackupKey(userId));
+function parseLocalBackup(raw: string | null, expectedUserId?: string): LocalBackupSnapshot | null {
   if (!raw) return null;
 
   try {
     const parsed = JSON.parse(raw) as Partial<LocalBackupSnapshot>;
     if (
       parsed?.version !== 1 ||
-      parsed.userId !== userId ||
+      (expectedUserId && parsed.userId !== expectedUserId) ||
+      typeof parsed.userId !== "string" ||
       !Array.isArray(parsed.meals) ||
       !Array.isArray(parsed.recipes) ||
       !Array.isArray(parsed.recipeSets) ||
@@ -72,7 +72,7 @@ function readLocalBackup(userId: string): LocalBackupSnapshot | null {
 
     return {
       version: 1,
-      userId,
+      userId: parsed.userId,
       savedAt: parsed.savedAt,
       meals: migrateMeals(parsed.meals as Meal[]),
       recipes: parsed.recipes as Recipe[],
@@ -82,6 +82,28 @@ function readLocalBackup(userId: string): LocalBackupSnapshot | null {
   } catch {
     return null;
   }
+}
+
+function readLocalBackup(userId: string): LocalBackupSnapshot | null {
+  if (typeof window === "undefined") return null;
+  return parseLocalBackup(window.localStorage.getItem(getBackupKey(userId)), userId);
+}
+
+function readLatestLocalBackup(): LocalBackupSnapshot | null {
+  if (typeof window === "undefined") return null;
+
+  const backups: LocalBackupSnapshot[] = [];
+  for (let index = 0; index < window.localStorage.length; index += 1) {
+    const key = window.localStorage.key(index);
+    if (!key?.startsWith(BACKUP_KEY_PREFIX)) continue;
+
+    const backup = parseLocalBackup(window.localStorage.getItem(key));
+    if (backup && hasMeaningfulData(backup)) {
+      backups.push(backup);
+    }
+  }
+
+  return backups.sort((a, b) => new Date(b.savedAt).getTime() - new Date(a.savedAt).getTime())[0] ?? null;
 }
 
 function writeLocalBackup(snapshot: LocalBackupSnapshot) {
@@ -186,6 +208,8 @@ function LoginCard({
   message,
   isBusy,
   onSubmit,
+  localBackup,
+  onUseLocalBackup,
 }: {
   mode: "signin" | "signup";
   setMode: (mode: "signin" | "signup") => void;
@@ -197,6 +221,8 @@ function LoginCard({
   message: string;
   isBusy: boolean;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  localBackup: LocalBackupSnapshot | null;
+  onUseLocalBackup: () => void;
 }) {
   return (
     <main className="min-h-screen bg-gray-950 text-gray-100 flex items-center justify-center p-6">
@@ -267,6 +293,23 @@ function LoginCard({
             {isBusy ? "処理中..." : mode === "signin" ? "ログインする" : "アカウントを作る"}
           </button>
         </form>
+
+        {localBackup && (
+          <div className="mt-5 border-t border-gray-800 pt-5">
+            <p className="text-sm text-gray-300">クラウドに接続できない場合</p>
+            <p className="text-xs text-gray-500 mt-2 leading-5">
+              この端末に残っているバックアップを開けます。保存日時:{" "}
+              {new Date(localBackup.savedAt).toLocaleString("ja-JP")}
+            </p>
+            <button
+              type="button"
+              onClick={onUseLocalBackup}
+              className="mt-3 w-full bg-amber-400 hover:bg-amber-300 text-gray-950 font-semibold rounded-xl px-4 py-3 transition-colors"
+            >
+              この端末のバックアップで開く
+            </button>
+          </div>
+        )}
       </div>
     </main>
   );
@@ -276,6 +319,7 @@ export default function Home() {
   const [session, setSession] = useState<Session | null>(null);
   const sessionRef = useRef<Session | null>(null);
   const [isBooting, setIsBooting] = useState(isSupabaseConfigured);
+  const [isLocalOnlyMode, setIsLocalOnlyMode] = useState(false);
   const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -297,6 +341,7 @@ export default function Home() {
   const [isDirty, setIsDirty] = useState(false);
   const lastCloudUpdatedAt = useRef<string | null>(null);
   const [localBackup, setLocalBackup] = useState<LocalBackupSnapshot | null>(null);
+  const [availableLocalBackup, setAvailableLocalBackup] = useState<LocalBackupSnapshot | null>(null);
   const [isUsingLocalBackup, setIsUsingLocalBackup] = useState(false);
   const [isRestoringBackup, setIsRestoringBackup] = useState(false);
   const [shouldOfferBackupRestore, setShouldOfferBackupRestore] = useState(false);
@@ -345,6 +390,7 @@ export default function Home() {
     setSyncStatus("idle");
     setSyncError("");
     setIsDirty(false);
+    setIsLocalOnlyMode(false);
   };
 
   const applySnapshotToState = (snapshot: Pick<LocalBackupSnapshot, "meals" | "recipes" | "recipeSets" | "goals">) => {
@@ -392,6 +438,8 @@ export default function Home() {
     const stored = window.localStorage.getItem("mealapp_mobile_override");
     if (stored === "1") setMobileOverrideState(true);
     else if (stored === "0") setMobileOverrideState(false);
+
+    setAvailableLocalBackup(readLatestLocalBackup());
   }, []);
 
   useEffect(() => {
@@ -400,16 +448,29 @@ export default function Home() {
     }
 
     let mounted = true;
-
-    supabase.auth.getSession().then(({ data }) => {
+    const bootTimeout = window.setTimeout(() => {
       if (!mounted) return;
-      sessionRef.current = data.session ?? null;
-      setSession(data.session ?? null);
-      if (!data.session) {
-        resetLocalData();
-      }
       setIsBooting(false);
-    });
+      setAuthError("クラウドへの接続確認に時間がかかっています。ログインできない場合は端末バックアップで開けます。");
+    }, 3500);
+
+    supabase.auth.getSession()
+      .then(({ data }) => {
+        if (!mounted) return;
+        window.clearTimeout(bootTimeout);
+        sessionRef.current = data.session ?? null;
+        setSession(data.session ?? null);
+        if (!data.session) {
+          resetLocalData();
+        }
+        setIsBooting(false);
+      })
+      .catch(() => {
+        if (!mounted) return;
+        window.clearTimeout(bootTimeout);
+        setIsBooting(false);
+        setAuthError("クラウドへの接続に失敗しました。端末バックアップがあれば、そこから開けます。");
+      });
 
     const {
       data: { subscription },
@@ -424,6 +485,7 @@ export default function Home() {
 
     return () => {
       mounted = false;
+      window.clearTimeout(bootTimeout);
       subscription.unsubscribe();
     };
   }, []);
@@ -537,6 +599,20 @@ export default function Home() {
   }, [session, hasLoadedData]);
 
   useEffect(() => {
+    if (!isLocalOnlyMode || !hasLoadedData || !isDirty) return;
+
+    const timer = window.setTimeout(() => {
+      const userId = localBackup?.userId ?? LOCAL_RECOVERY_USER_ID;
+      persistLocalBackup(userId, { meals, recipes, recipeSets, goals });
+      setIsDirty(false);
+      setSyncStatus("saved");
+      setSyncError("この端末に保存しました。クラウド同期は停止中です。");
+    }, 800);
+
+    return () => window.clearTimeout(timer);
+  }, [goals, hasLoadedData, isDirty, isLocalOnlyMode, localBackup?.userId, meals, recipeSets, recipes]);
+
+  useEffect(() => {
     // スマホは meals を直接保存しない（pending_meals 経由で送信する）
     if (!supabase || !hasLoadedData || !canSyncToCloud || !isDirty || isMobile) return;
 
@@ -618,27 +694,31 @@ export default function Home() {
     setAuthMessage("");
     setIsAuthBusy(true);
 
-    if (authMode === "signup") {
-      const { data, error } = await supabase.auth.signUp({ email, password });
-      if (error) {
-        setAuthError(error.message);
-      } else if (data.session) {
-        setAuthMessage("登録してログインしました");
+    try {
+      if (authMode === "signup") {
+        const { data, error } = await supabase.auth.signUp({ email, password });
+        if (error) {
+          setAuthError(error.message);
+        } else if (data.session) {
+          setAuthMessage("登録してログインしました");
+        } else {
+          setAuthMessage("登録できました。確認メールが届いた場合はメールを開いてください。");
+        }
       } else {
-        setAuthMessage("登録できました。確認メールが届いた場合はメールを開いてください。");
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) {
+          setAuthError(error.message);
+        }
       }
-    } else {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) {
-        setAuthError(error.message);
-      }
+    } catch {
+      setAuthError("クラウドに接続できませんでした。端末バックアップがあれば、そこから開けます。");
+    } finally {
+      setIsAuthBusy(false);
     }
-
-    setIsAuthBusy(false);
   };
 
   const handleAddMeal = (meal: Meal) => {
-    if (isMobile) {
+    if (isMobile && !isLocalOnlyMode) {
       // スマホ：送信を直列化して race condition を防ぐ
       const pendingMeal: PendingMeal = { ...meal, submittedAt: new Date().toISOString() };
       setPendingMeals((prev) => [...prev, pendingMeal]);
@@ -826,8 +906,28 @@ export default function Home() {
   };
 
   const handleSignOut = async () => {
+    if (isLocalOnlyMode) {
+      resetLocalData();
+      setAvailableLocalBackup(readLatestLocalBackup());
+      return;
+    }
     if (!supabase) return;
     await supabase.auth.signOut();
+  };
+
+  const handleUseLocalBackup = () => {
+    const backup = availableLocalBackup ?? readLatestLocalBackup();
+    if (!backup) return;
+
+    applySnapshotToState(backup);
+    setLocalBackup(backup);
+    setHasLoadedData(true);
+    setCanSyncToCloud(false);
+    setIsUsingLocalBackup(true);
+    setIsLocalOnlyMode(true);
+    setSyncStatus("error");
+    setSyncError("この端末のバックアップを表示しています。クラウド同期は停止中です。");
+    setAuthError("");
   };
 
   const handleRestoreLocalBackup = async () => {
@@ -913,6 +1013,8 @@ export default function Home() {
         message={authMessage}
         isBusy={isAuthBusy}
         onSubmit={handleAuthSubmit}
+        localBackup={availableLocalBackup}
+        onUseLocalBackup={handleUseLocalBackup}
       />
     );
   }
@@ -1153,7 +1255,7 @@ export default function Home() {
             <h1 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
               MealApp
               <span className="text-emerald-400 bg-emerald-400/10 px-2 py-0.5 rounded text-sm">
-                Sync
+                {isLocalOnlyMode ? "Local" : "Sync"}
               </span>
             </h1>
             <p className="text-sm text-gray-400 mt-1">{headerLabel}</p>
@@ -1210,7 +1312,7 @@ export default function Home() {
               onClick={handleSignOut}
               className="text-xs bg-gray-950 hover:bg-gray-800 text-gray-300 px-4 py-2 rounded-lg border border-gray-700 transition font-medium"
             >
-              ログアウト
+              {isLocalOnlyMode ? "閉じる" : "ログアウト"}
             </button>
           </div>
         </header>
@@ -1227,14 +1329,20 @@ export default function Home() {
             {backupRestoreHint && (
               <p className="text-xs text-amber-100/80 mt-2 leading-5">{backupRestoreHint}</p>
             )}
-            <button
-              type="button"
-              onClick={handleRestoreLocalBackup}
-              disabled={isRestoringBackup}
-              className="mt-3 bg-amber-400 hover:bg-amber-300 disabled:opacity-50 disabled:cursor-not-allowed text-gray-950 text-sm font-semibold px-4 py-2 rounded-xl transition-colors"
-            >
-              {isRestoringBackup ? "復元中..." : "この端末のバックアップをクラウドへ戻す"}
-            </button>
+            {session && supabase ? (
+              <button
+                type="button"
+                onClick={handleRestoreLocalBackup}
+                disabled={isRestoringBackup}
+                className="mt-3 bg-amber-400 hover:bg-amber-300 disabled:opacity-50 disabled:cursor-not-allowed text-gray-950 text-sm font-semibold px-4 py-2 rounded-xl transition-colors"
+              >
+                {isRestoringBackup ? "復元中..." : "この端末のバックアップをクラウドへ戻す"}
+              </button>
+            ) : (
+              <p className="text-xs text-amber-100/80 mt-2 leading-5">
+                クラウド復旧後にログインできれば、このバックアップを戻せます。今はこの端末内に保存します。
+              </p>
+            )}
           </section>
         )}
 
