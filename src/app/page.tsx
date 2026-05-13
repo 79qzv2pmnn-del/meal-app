@@ -326,6 +326,7 @@ export default function Home() {
   const [authError, setAuthError] = useState("");
   const [authMessage, setAuthMessage] = useState("");
   const [isAuthBusy, setIsAuthBusy] = useState(false);
+  const [exportMessage, setExportMessage] = useState("");
 
   const [meals, setMeals] = useState<Meal[]>([]);
   const [recipes, setRecipes] = useState<Recipe[]>([]);
@@ -685,6 +686,23 @@ export default function Home() {
   const totalP = selectedMeals.reduce((sum, meal) => sum + meal.protein, 0);
   const totalF = selectedMeals.reduce((sum, meal) => sum + meal.fat, 0);
   const totalC = selectedMeals.reduce((sum, meal) => sum + meal.carbs, 0);
+
+  const buildMealAppExportPayload = () => ({
+    source: "MealApp",
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    goals,
+    meals,
+  });
+
+  const handleCopyMealAppJson = async () => {
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(buildMealAppExportPayload(), null, 2));
+      setExportMessage("統合ツール用JSONをコピーしました。筋トレダッシュボードに貼り付けて取り込めます。");
+    } catch {
+      setExportMessage("コピーできませんでした。ブラウザの権限を確認してください。");
+    }
+  };
 
   const handleAuthSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -1265,6 +1283,7 @@ export default function Home() {
               {syncStatus === "error" && "保存エラー"}
             </p>
             {syncError && <p className="text-xs text-red-400 mt-1">{syncError}</p>}
+            {exportMessage && <p className="text-xs text-emerald-300 mt-1">{exportMessage}</p>}
             {localBackup && hasMeaningfulData(localBackup) && (
               <p className="text-xs text-gray-500 mt-1">
                 この端末のバックアップ: {new Date(localBackup.savedAt).toLocaleString("ja-JP")}
@@ -1291,6 +1310,12 @@ export default function Home() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
               </svg>
+            </button>
+            <button
+              onClick={handleCopyMealAppJson}
+              className="text-xs bg-emerald-500 hover:bg-emerald-400 text-gray-950 px-4 py-2 rounded-lg transition font-semibold"
+            >
+              JSONコピー
             </button>
             <button
               onClick={() => setHasLoadedData(false)}
