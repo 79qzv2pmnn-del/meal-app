@@ -210,6 +210,7 @@ function LoginCard({
   onSubmit,
   localBackup,
   onUseLocalBackup,
+  onStartLocalOnly,
 }: {
   mode: "signin" | "signup";
   setMode: (mode: "signin" | "signup") => void;
@@ -223,6 +224,7 @@ function LoginCard({
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   localBackup: LocalBackupSnapshot | null;
   onUseLocalBackup: () => void;
+  onStartLocalOnly: () => void;
 }) {
   return (
     <main className="min-h-screen bg-gray-950 text-gray-100 flex items-center justify-center p-6">
@@ -294,22 +296,37 @@ function LoginCard({
           </button>
         </form>
 
-        {localBackup && (
-          <div className="mt-5 border-t border-gray-800 pt-5">
-            <p className="text-sm text-gray-300">クラウドに接続できない場合</p>
-            <p className="text-xs text-gray-500 mt-2 leading-5">
-              この端末に残っているバックアップを開けます。保存日時:{" "}
-              {new Date(localBackup.savedAt).toLocaleString("ja-JP")}
-            </p>
-            <button
-              type="button"
-              onClick={onUseLocalBackup}
-              className="mt-3 w-full bg-amber-400 hover:bg-amber-300 text-gray-950 font-semibold rounded-xl px-4 py-3 transition-colors"
-            >
-              この端末のバックアップで開く
-            </button>
-          </div>
-        )}
+        <div className="mt-5 border-t border-gray-800 pt-5">
+          <p className="text-sm text-gray-300">クラウドに接続できない場合</p>
+          {localBackup ? (
+            <>
+              <p className="text-xs text-gray-500 mt-2 leading-5">
+                この端末に残っているバックアップを開けます。保存日時:{" "}
+                {new Date(localBackup.savedAt).toLocaleString("ja-JP")}
+              </p>
+              <button
+                type="button"
+                onClick={onUseLocalBackup}
+                className="mt-3 w-full bg-amber-400 hover:bg-amber-300 text-gray-950 font-semibold rounded-xl px-4 py-3 transition-colors"
+              >
+                この端末のバックアップで開く
+              </button>
+            </>
+          ) : (
+            <>
+              <p className="text-xs text-gray-500 mt-2 leading-5">
+                ログインなしで入力を始められます。入力後は JSONコピー から筋トレダッシュボードへ同期できます。
+              </p>
+              <button
+                type="button"
+                onClick={onStartLocalOnly}
+                className="mt-3 w-full bg-amber-400 hover:bg-amber-300 text-gray-950 font-semibold rounded-xl px-4 py-3 transition-colors"
+              >
+                ログインなしで入力を始める
+              </button>
+            </>
+          )}
+        </div>
       </div>
     </main>
   );
@@ -938,7 +955,10 @@ export default function Home() {
 
   const handleUseLocalBackup = () => {
     const backup = availableLocalBackup ?? readLatestLocalBackup();
-    if (!backup) return;
+    if (!backup) {
+      handleStartLocalOnly();
+      return;
+    }
 
     applySnapshotToState(backup);
     setLocalBackup(backup);
@@ -948,6 +968,29 @@ export default function Home() {
     setIsLocalOnlyMode(true);
     setSyncStatus("error");
     setSyncError("この端末のバックアップを表示しています。クラウド同期は停止中です。");
+    setAuthError("");
+  };
+
+  const handleStartLocalOnly = () => {
+    const snapshot: LocalBackupSnapshot = {
+      version: 1,
+      userId: LOCAL_RECOVERY_USER_ID,
+      savedAt: new Date().toISOString(),
+      meals: [],
+      recipes: [],
+      recipeSets: [],
+      goals: DEFAULT_GOALS,
+    };
+
+    applySnapshotToState(snapshot);
+    persistLocalBackup(snapshot.userId, snapshot);
+    setLocalBackup(snapshot);
+    setHasLoadedData(true);
+    setCanSyncToCloud(false);
+    setIsUsingLocalBackup(true);
+    setIsLocalOnlyMode(true);
+    setSyncStatus("error");
+    setSyncError("ログインなしの入力モードです。入力後は JSONコピー で筋トレダッシュボードへ同期してください。");
     setAuthError("");
   };
 
@@ -1036,6 +1079,7 @@ export default function Home() {
         onSubmit={handleAuthSubmit}
         localBackup={availableLocalBackup}
         onUseLocalBackup={handleUseLocalBackup}
+        onStartLocalOnly={handleStartLocalOnly}
       />
     );
   }
