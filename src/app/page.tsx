@@ -693,6 +693,9 @@ export default function Home() {
     exportedAt: new Date().toISOString(),
     goals,
     meals,
+    recipes,
+    recipe_sets: recipeSets,
+    recipeSets,
   });
 
   const handleCopyMealAppJson = async () => {
